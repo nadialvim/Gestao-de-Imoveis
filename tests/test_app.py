@@ -1,3 +1,4 @@
+import re
 from datetime import date
 from decimal import Decimal
 
@@ -487,3 +488,64 @@ def test_pagina_debitos_e_exportacoes_com_recebido_por(client, base):
     assert "Sergio" in client.get("/relatorios/?mes=2026-03").get_data(as_text=True)
     d = relatorio.dados_mes(2026, 3)
     assert relatorio.gerar_pdf(d).startswith(b"%PDF") and relatorio.gerar_xlsx(d)[:2] == b"PK"
+
+
+# ---------- inquilino já com o aluguel ----------
+def _inq_form(imovel=None, vaga=None, **extra):
+    d = {"nome": "Paulo Dias", "telefone": "1199", "aluguel_dia_vencimento": "5"}
+    if imovel:
+        d["aluguel_imovel_id"] = imovel.id
+    if vaga:
+        d["aluguel_vaga_id"] = vaga.id
+    if imovel or vaga:
+        d.update({"aluguel_inicio": "2026-03-01", "aluguel_fim": "2027-02-28"})
+    d.update(extra)
+    return d
+
+
+def test_inquilino_com_imovel_cria_contrato(client, base):
+    _, a, v, _ = base
+    r = client.post("/c/inquilinos/novo", data=_inq_form(imovel=a))
+    assert r.status_code == 302
+    inq = Inquilino.query.filter_by(nome="Paulo Dias").one()
+    c = Contrato.query.filter_by(inquilino_id=inq.id).one()
+    assert c.imovel_id == a.id and c.valor_mensal == Decimal("1000") and c.ativo
+    assert c.data_inicio == date(2026, 3, 1) and c.dia_vencimento == 5
+    db.session.refresh(a)
+    assert not a.disponivel
+    html = client.get("/c/inquilinos/").get_data(as_text=True)
+    assert "Aluguéis ativos" in html and "Apto 101" in html
+    assert "Aluguéis deste inquilino" in client.get(f"/c/inquilinos/{inq.id}/editar").get_data(as_text=True)
+
+
+def test_inquilino_com_imovel_e_vaga_cria_dois_contratos(client, base):
+    _, a, v, _ = base
+    client.post("/c/inquilinos/novo", data=_inq_form(imovel=a, vaga=v))
+    assert Contrato.query.count() == 2
+    assert {(c.imovel_id, c.vaga_id) for c in Contrato.query.all()} == {(a.id, None), (None, v.id)}
+
+
+def test_inquilino_aluguel_invalido_nao_salva_nada(client, base):
+    _, a, _, i = base
+    r = client.post("/c/inquilinos/novo", data=_inq_form(imovel=a, aluguel_inicio="",
+                                                         aluguel_fim=""))
+    assert "Informe o início e o fim".encode() in r.data
+    assert Inquilino.query.filter_by(nome="Paulo Dias").count() == 0
+    novo_contrato(i, a=a)  # imóvel já alugado
+    r = client.post("/c/inquilinos/novo", data=_inq_form(imovel=a))
+    assert "Já está alugado".encode() in r.data
+    assert Inquilino.query.filter_by(nome="Paulo Dias").count() == 0
+    assert Contrato.query.count() == 1
+
+
+def test_inquilino_sem_aluguel_e_edicao_adiciona_aluguel(client, base):
+    _, a, _, _ = base
+    assert client.post("/c/inquilinos/novo", data=_inq_form()).status_code == 302
+    inq = Inquilino.query.filter_by(nome="Paulo Dias").one()
+    assert Contrato.query.count() == 0
+    assert client.get(f"/c/inquilinos/novo?aluguel_imovel_id={a.id}").status_code == 200
+    html = client.get(f"/c/inquilinos/{inq.id}/editar").get_data(as_text=True)
+    assert re.search(r'name="aluguel_dia_vencimento"\s+value="5"', html)
+    r = client.post(f"/c/inquilinos/{inq.id}/editar", data=_inq_form(imovel=a))
+    assert r.status_code == 302
+    assert Contrato.query.filter_by(inquilino_id=inq.id).count() == 1

@@ -26,6 +26,7 @@ class Field:
     default: Optional[object] = None
     wide: bool = False  # ocupa a linha inteira no formulário de 2 colunas
     extra: bool = False  # não é coluna do modelo (só alimenta validate/before_save)
+    section: Optional[str] = None  # subtítulo exibido antes do campo no formulário
 
     def opcoes(self, obj=None):
         """Opções do select; a função de opções pode receber o objeto em edição."""

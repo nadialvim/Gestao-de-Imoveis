@@ -88,6 +88,11 @@ class Inquilino(db.Model):
     telefone = db.Column(db.String(40))
     email = db.Column(db.String(150))
     documento = db.Column(db.String(40))
+    contratos = db.relationship("Contrato", viewonly=True, order_by="Contrato.data_inicio.desc()")
+
+    @property
+    def alugueis_ativos(self):
+        return [c for c in self.contratos if c.ativo]
 
     def __str__(self):
         return self.nome

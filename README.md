@@ -39,3 +39,6 @@ pagamentos parciais (complementos do mesmo mês de referência são abatidos). O
 inquilinos com meses vencidos e não pagos desde o início do contrato.
 
 Se o banco já existia antes desta versão, rode também `db/migrations/003_recebido_por.sql` (uma vez).
+
+Atalho: em **Inquilinos → Novo**, a seção "Aluguel (opcional)" já vincula o imóvel e/ou a vaga com o período; o
+sistema cria o contrato com o valor do imóvel. O mesmo vale ao editar um inquilino para adicionar outro aluguel.

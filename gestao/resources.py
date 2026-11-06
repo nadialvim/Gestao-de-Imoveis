@@ -58,6 +58,22 @@ def inquilino_atual(obj):
 
 
 # ---------- validações ----------
+def erros_alvo(imovel_id, vaga_id, excluir_contrato_id=None):
+    """Valor definido e disponibilidade do imóvel/vaga que será alugado."""
+    alvo = (db.session.get(Imovel, imovel_id) if imovel_id else db.session.get(Vaga, vaga_id))
+    if alvo is None or not alvo.valor_aluguel_padrao:
+        return ["Defina o valor do aluguel no cadastro do imóvel/vaga antes de alugar."]
+    q = Contrato.query.filter(Contrato.ativo.is_(True))
+    q = q.filter(Contrato.imovel_id == imovel_id if imovel_id else Contrato.vaga_id == vaga_id)
+    if excluir_contrato_id is not None:
+        q = q.filter(Contrato.id != excluir_contrato_id)
+    outro = q.first()
+    if outro:
+        return [f"Já está alugado: {alvo} ({outro.inquilino.nome}). "
+                "Dê baixa no contrato atual antes de alugar novamente."]
+    return []
+
+
 def validar_contrato(d, obj):
     erros = []
     if bool(d["imovel_id"]) == bool(d["vaga_id"]):
@@ -70,23 +86,44 @@ def validar_contrato(d, obj):
         erros.append("Escolha um inquilino ou informe o nome de um novo.")
     ativo = obj is None or obj.ativo is not False  # contrato encerrado não bloqueia
     if not erros and ativo:
-        alvo = (db.session.get(Imovel, d["imovel_id"]) if d["imovel_id"]
-                else db.session.get(Vaga, d["vaga_id"]))
-        if alvo is None or not alvo.valor_aluguel_padrao:
-            erros.append("Defina o valor do aluguel no cadastro do imóvel/vaga antes de alugar.")
-    if not erros and ativo:
-        q = Contrato.query.filter(Contrato.ativo.is_(True))
-        if d["imovel_id"]:
-            q = q.filter(Contrato.imovel_id == d["imovel_id"])
-        else:
-            q = q.filter(Contrato.vaga_id == d["vaga_id"])
-        if obj is not None and obj.id is not None:
-            q = q.filter(Contrato.id != obj.id)
-        outro = q.first()
-        if outro:
-            erros.append(f"Já está alugado ({outro.inquilino.nome}). "
-                         "Dê baixa no contrato atual antes de alugar novamente.")
+        erros.extend(erros_alvo(d["imovel_id"], d["vaga_id"],
+                                obj.id if obj is not None else None))
     return erros
+
+
+def validar_inquilino(d, obj):
+    """Aluguel opcional no cadastro do inquilino (imóvel e/ou vaga + período)."""
+    if not (d["aluguel_imovel_id"] or d["aluguel_vaga_id"]):
+        return []
+    erros = []
+    if not d["aluguel_inicio"] or not d["aluguel_fim"]:
+        erros.append("Informe o início e o fim do aluguel.")
+    elif d["aluguel_fim"] < d["aluguel_inicio"]:
+        erros.append("A data final não pode ser anterior à inicial.")
+    if not d["aluguel_dia_vencimento"] or not 1 <= d["aluguel_dia_vencimento"] <= 31:
+        erros.append("Dia de vencimento deve estar entre 1 e 31.")
+    if not erros:
+        for imovel_id, vaga_id in ((d["aluguel_imovel_id"], None), (None, d["aluguel_vaga_id"])):
+            if imovel_id or vaga_id:
+                erros.extend(erros_alvo(imovel_id, vaga_id))
+    return erros
+
+
+def criar_alugueis(obj, d):
+    """Salva o inquilino e cria os contratos escolhidos na mesma transação."""
+    if not (d["aluguel_imovel_id"] or d["aluguel_vaga_id"]):
+        return
+    db.session.add(obj)
+    db.session.flush()
+    for imovel_id, vaga_id in ((d["aluguel_imovel_id"], None), (None, d["aluguel_vaga_id"])):
+        if not (imovel_id or vaga_id):
+            continue
+        alvo = db.session.get(Imovel, imovel_id) if imovel_id else db.session.get(Vaga, vaga_id)
+        db.session.add(Contrato(
+            inquilino_id=obj.id, imovel_id=imovel_id, vaga_id=vaga_id,
+            data_inicio=d["aluguel_inicio"], data_fim=d["aluguel_fim"],
+            dia_vencimento=d["aluguel_dia_vencimento"], valor_mensal=alvo.valor_aluguel_padrao,
+            ativo=True))
 
 
 def preparar_contrato(obj, d):
@@ -232,10 +269,24 @@ RESOURCES = {r.slug: r for r in [
         fields=[Field("nome", "Nome"),
                 Field("telefone", "Telefone", required=False),
                 Field("email", "E-mail", required=False),
-                Field("documento", "CPF / documento", required=False)],
+                Field("documento", "CPF / documento", required=False),
+                Field("aluguel_imovel_id", "Imóvel (apto, casa ou loja)", "select",
+                      required=False, choices=opcoes_imoveis, extra=True,
+                      section="Aluguel (opcional) — vincule o imóvel já neste cadastro"),
+                Field("aluguel_vaga_id", "Vaga de garagem", "select", required=False,
+                      choices=opcoes_vagas, extra=True),
+                Field("aluguel_inicio", "Início do aluguel", "date", required=False,
+                      extra=True),
+                Field("aluguel_fim", "Fim do aluguel", "date", required=False, extra=True),
+                Field("aluguel_dia_vencimento", "Dia de vencimento", "int", required=False,
+                      default=5, extra=True)],
         columns=[("Nome", lambda o: o.nome), ("Telefone", lambda o: o.telefone or ""),
-                 ("E-mail", lambda o: o.email or "")],
+                 ("E-mail", lambda o: o.email or ""),
+                 ("Aluguéis ativos",
+                  lambda o: ", ".join(str(c.imovel) for c in o.alugueis_ativos) or "—")],
         order=lambda: [Inquilino.nome],
+        validate=validar_inquilino,
+        before_save=criar_alugueis,
     ),
     Resource(
         "contratos", Contrato, "Contrato", "Contratos",

@@ -15,6 +15,7 @@
       <div class="row g-3">
         {% for f in res.fields + res.extra_fields %}
         {% set v = valores.get(f.name, '') %}
+        {% if f.section %}<div class="col-12 mt-4"><h2 class="h6 text-uppercase text-muted border-bottom pb-2 mb-0">{{ f.section }}</h2></div>{% endif %}
         <div class="col-12 {{ '' if f.wide or f.kind == 'bool' else 'col-md-6' }}">
           {% if f.kind == 'bool' %}
           <div class="form-check form-switch pt-md-4">
@@ -63,6 +64,25 @@
     </form>
   </div>
 </div>
+{% if res.slug == 'inquilinos' and obj.id %}
+<div class="card mt-4" style="max-width: 880px;">
+  <div class="card-header"><i class="bi bi-key me-1"></i>Aluguéis deste inquilino ({{ obj.contratos|length }})</div>
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead><tr><th>Imóvel / vaga</th><th>Período</th><th class="text-end">Valor</th><th>Situação</th></tr></thead>
+      <tbody>
+        {% for c in obj.contratos %}
+        <tr><td>{{ c.imovel }}</td><td>{{ c.data_inicio|data_br }} a {{ c.data_fim|data_br }}</td>
+            <td class="text-end text-money">{{ c.valor_mensal|brl }}</td>
+            <td>{% if c.ativo %}<span class="badge badge-soft-success">Ativo</span>{% else %}<span class="badge badge-soft-secondary">Encerrado{% if c.encerrado_em %} em {{ c.encerrado_em|data_br }}{% endif %}</span>{% endif %}</td></tr>
+        {% else %}
+        <tr><td colspan="4"><div class="empty py-3">Nenhum aluguel ainda. Use a seção "Aluguel" acima para vincular um imóvel.</div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
 {% if res.slug == 'predios' and obj.id %}
 <div class="card mt-4" style="max-width: 880px;">
   <div class="card-header"><i class="bi bi-buildings me-1"></i>Unidades deste prédio ({{ obj.imoveis|length }})</div>

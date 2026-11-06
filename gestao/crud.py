@@ -74,7 +74,8 @@ def listar(slug):
 
 def _valores_iniciais(res, obj):
     if obj is not None and obj.id is not None:
-        return {f.name: f.to_input(getattr(obj, f.name, None)) for f in res.fields}
+        return {f.name: f.to_input(f.default if f.extra else getattr(obj, f.name))
+                for f in res.fields}
     base = res.new_defaults() if res.new_defaults else {}
     valores = {f.name: f.to_input(base.get(f.name, f.default)) for f in res.fields}
     for f in res.fields:  # valores iniciais pela URL (ex.: ?imovel_id=3 no botão Alugar)
