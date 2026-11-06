@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}{{ i }}{% endblock %}
+{% block heading %}{{ i }}{% endblock %}
+{% block subtitle %}<div class="sub">{{ i.tipo_nome }}
+  {% if i.disponivel %}<span class="badge badge-soft-success ms-2">Disponível</span>{% else %}<span class="badge badge-soft-warning ms-2">Alugado</span>{% endif %}</div>{% endblock %}
+{% block actions %}
+  {% if i.disponivel %}
+  <a class="btn btn-success" href="{{ url_for('crud.novo', slug='alugueis', aluguel_imoveis=i.id) }}"><i class="bi bi-key me-1"></i>Alugar</a>
+  {% else %}
+  <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#modalBaixa"
+          data-action="{{ url_for('fichas.baixar', id=i.contrato_ativo.id) }}" data-nome="{{ i.contrato_ativo }}"><i class="bi bi-box-arrow-in-left me-1"></i>Dar baixa</button>
+  {% endif %}
+  <a class="btn btn-outline-secondary" href="{{ url_for('crud.editar', slug='imoveis', id=i.id) }}"><i class="bi bi-pencil me-1"></i>Editar</a>
+{% endblock %}
+{% block content %}
+<div class="card mb-4">
+  <div class="card-body">
+    <dl class="info-grid mb-0">
+      <div><dt>Tipo</dt><dd>{{ i.tipo_nome }}</dd></div>
+      <div><dt>Prédio</dt><dd>{% if i.predio %}<a href="{{ url_for('fichas.predio', id=i.predio.id) }}">{{ i.predio.nome }}</a>{% else %}—{% endif %}</dd></div>
+      <div><dt>Valor do aluguel</dt><dd class="text-money">{{ i.valor_aluguel_padrao|brl if i.valor_aluguel_padrao else 'não definido' }}</dd></div>
+      <div><dt>Inquilino atual</dt><dd>{% if i.contrato_ativo %}<a href="{{ url_for('fichas.inquilino', id=i.contrato_ativo.inquilino_id) }}">{{ i.contrato_ativo.inquilino.nome }}</a>{% else %}—{% endif %}</dd></div>
+      {% if i.descricao %}<div class="wide"><dt>Descrição</dt><dd>{{ i.descricao }}</dd></div>{% endif %}
+    </dl>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header"><i class="bi bi-clock-history me-1"></i>Histórico de aluguéis</div>
+  {% set contratos = i.contratos %}{% set mostrar = 'inquilino' %}{% set acoes = false %}
+  {% include "_tabela_alugueis.html" %}
+</div>
+
+<div class="card mb-4">
+  <div class="card-header"><i class="bi bi-cash-coin me-1"></i>Pagamentos recentes</div>
+  {% include "_tabela_pagamentos.html" %}
+</div>
+{% include "_modal_baixa.html" %}
+{% endblock %}

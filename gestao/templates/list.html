@@ -4,6 +4,7 @@
 {% block actions %}
   {% for f in filtros %}
   <form method="get" class="d-flex gap-2">
+    {% for outro in filtros if outro.nome != f.nome and outro.atual %}<input type="hidden" name="{{ outro.nome }}" value="{{ outro.atual }}">{% endfor %}
     <select name="{{ f.nome }}" class="form-select" aria-label="{{ f.rotulo }}" onchange="this.form.submit()">
       <option value="">{{ f.rotulo }}: todos</option>
       {% for val, txt in f.opcoes %}<option value="{{ val }}" {% if f.atual == val %}selected{% endif %}>{{ txt }}</option>{% endfor %}
@@ -36,19 +37,16 @@
         {% for id, cells, obj in linhas %}
         <tr data-row>
           {% for c in cells %}
-          <td>{% if c.cor is defined %}<span class="badge badge-soft-{{ c.cor }}">{{ c.texto }}</span>{% else %}{{ c }}{% endif %}</td>
+          <td>
+            {% if loop.first and res.ficha %}<a class="fw-semibold text-decoration-none" href="{{ url_for(res.ficha, id=id) }}">{{ c }}</a>
+            {% elif c.cor is defined %}<span class="badge badge-soft-{{ c.cor }}">{{ c.texto }}</span>
+            {% else %}{{ c }}{% endif %}
+          </td>
           {% endfor %}
           <td class="text-end text-nowrap">
-            {% if res.slug in ('imoveis', 'vagas') and obj.disponivel %}
-            <a class="btn btn-sm btn-success" title="Alugar"
-               href="{{ url_for('crud.novo', slug='contratos', **({'imovel_id': id} if res.slug == 'imoveis' else {'vaga_id': id})) }}"><i class="bi bi-key me-1"></i>Alugar</a>
-            {% endif %}
-            {% set ctr = obj if res.slug == 'contratos' else obj.contrato_ativo %}
-            {% if res.slug in ('contratos', 'imoveis', 'vagas') and ctr and ctr.ativo %}
-            <button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#modalBaixa"
-                    data-action="{{ url_for('crud.baixar_contrato', id=ctr.id) }}" data-nome="{{ ctr }}"
-                    title="Dar baixa (devolução do imóvel)"><i class="bi bi-box-arrow-in-left me-1"></i>Dar baixa</button>
-            {% endif %}
+            {% if res.ficha %}
+            <a class="btn btn-sm btn-outline-primary" title="Abrir ficha" href="{{ url_for(res.ficha, id=id) }}"><i class="bi bi-box-arrow-up-right me-1"></i>Abrir</a>
+            {% else %}
             <a class="btn btn-sm btn-outline-primary btn-icon" title="Editar"
                href="{{ url_for('crud.editar', slug=res.slug, id=id) }}"><i class="bi bi-pencil"></i></a>
             <form method="post" action="{{ url_for('crud.excluir', slug=res.slug, id=id) }}" class="d-inline"
@@ -56,6 +54,7 @@
               <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
               <button class="btn btn-sm btn-outline-danger btn-icon" title="Excluir"><i class="bi bi-trash"></i></button>
             </form>
+            {% endif %}
           </td>
         </tr>
         {% endfor %}
@@ -67,27 +66,4 @@
   {% endif %}
   <div class="empty" id="sem-resultado" style="display:none"><i class="bi bi-search"></i>Nada encontrado para a busca.</div>
 </div>
-
-{% if res.slug in ('contratos', 'imoveis', 'vagas') %}
-<div class="modal fade" id="modalBaixa" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <form method="post" class="modal-content" id="formBaixa">
-      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-      <input type="hidden" name="voltar" value="{{ res.slug }}">
-      <div class="modal-header"><h5 class="modal-title">Dar baixa no aluguel</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button></div>
-      <div class="modal-body">
-        <p class="mb-3" id="baixaNome"></p>
-        <label class="form-label" for="data_devolucao">Data da devolução</label>
-        <input class="form-control" type="date" id="data_devolucao" name="data_devolucao" value="{{ hoje }}" required>
-        <div class="form-text">O imóvel ficará disponível para nova locação.</div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-        <button class="btn btn-warning">Confirmar baixa</button>
-      </div>
-    </form>
-  </div>
-</div>
-{% endif %}
 {% endblock %}

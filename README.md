@@ -13,7 +13,7 @@ pytest                                              # testes (SQLite em memória
 ```
 
 ## Publicar (grátis)
-1. **Supabase**: crie um projeto. Em *SQL Editor*, execute `db/schema.sql`.
+1. **Supabase**: crie um projeto. Em *SQL Editor*, execute `db/schema.sql` (banco novo).
    - *Authentication > Providers > Email*: **desative "Allow new users to sign up"** (qualquer conta
      criada no Supabase consegue entrar no sistema). Crie os usuários em *Authentication > Users*
      (marque "Auto Confirm User").
@@ -23,22 +23,27 @@ pytest                                              # testes (SQLite em memória
    `DATABASE_URL` (ou `POSTGRES_URL`, da integração Supabase), `SUPABASE_URL`, `SUPABASE_ANON_KEY` (ou `SUPABASE_PUBLISHABLE_KEY`) e `SECRET_KEY` (valor aleatório longo, obrigatório). Não use a `SUPABASE_SECRET_KEY`.
 4. Acesse a URL gerada e entre com um usuário do Supabase.
 
+## Atualizar um banco que já existia
+Rode, **na ordem e uma vez cada**, no SQL Editor do Supabase, apenas as migrações que ainda não rodou
+(faça backup antes da 004):
+`db/migrations/002_imoveis.sql` → `003_recebido_por.sql` → `004_unifica_vagas.sql`.
+Bancos novos usam só `db/schema.sql`.
+
 ## Como usar
-Prédios (já com a lista de apartamentos e lojas; dá para adicionar mais depois) → Imóveis (apartamento/loja num prédio, ou casa independente) / Vagas → Inquilinos → alugar pelo botão **Alugar** do imóvel/vaga disponível (escolha ou cadastre o inquilino e informe o período; o valor é o do imóvel). O imóvel alugado só volta a ficar disponível ao **Dar baixa** → Pagamentos
-(mês de referência e data do recebimento) → Despesas. Em **Relatórios** escolha o mês e exporte PDF ou Excel:
-o relatório lista os valores *recebidos no mês* (pela data do pagamento), as despesas do mês e o saldo a repassar.
+O menu tem 6 itens: **Início, Imóveis, Inquilinos, Pagamentos, Despesas, Relatórios**.
 
-## Atualizar o banco (versão com imóveis/baixa)
-Se o banco foi criado com a versão anterior (tabela `apartamentos`), rode **uma vez** o conteúdo de
-`db/migrations/002_imoveis.sql` no SQL Editor do Supabase, antes de usar o site atualizado. Bancos novos usam
-apenas `db/schema.sql`.
-
-Pagamentos: ao escolher o contrato e o mês, o valor recebido vem preenchido com o que falta (editável); informe a
-forma (Pix, Dinheiro, Transferência) e quem recebeu (Sergio/Fagner). A lista mostra a coluna **Faltante** em
-pagamentos parciais (complementos do mesmo mês de referência são abatidos). O menu **Em débito** lista os
-inquilinos com meses vencidos e não pagos desde o início do contrato.
-
-Se o banco já existia antes desta versão, rode também `db/migrations/003_recebido_por.sql` (uma vez).
-
-Atalho: em **Inquilinos → Novo**, a seção "Aluguel (opcional)" já vincula o imóvel e/ou a vaga com o período; o
-sistema cria o contrato com o valor do imóvel. O mesmo vale ao editar um inquilino para adicionar outro aluguel.
+- **Imóveis** (abas *Imóveis* e *Prédios*): o **Prédio** já é cadastrado com a lista de apartamentos, lojas e vagas
+  (`101, 102` ou `101-110`) e dá para adicionar mais depois. **Casa** é independente de prédio; **vaga de
+  garagem** é um tipo de imóvel. O valor do aluguel fica no imóvel.
+- **Fichas**: clicar no nome abre a ficha do prédio (grade de unidades verde = disponível / âmbar = alugada),
+  do imóvel (histórico de aluguéis e pagamentos) ou do inquilino (aluguéis, débito e pagamentos).
+- **Alugar**: botão **Alugar** do imóvel, **Novo aluguel** do inquilino ou do Início — o mesmo formulário:
+  escolha (ou cadastre) o inquilino, os imóveis/vagas e o período. O valor mensal é o do imóvel. Também dá
+  para vincular o imóvel direto ao cadastrar o inquilino. Imóvel alugado só volta a ficar disponível ao
+  **Dar baixa** (na ficha do imóvel ou do inquilino).
+- **Pagamentos**: pelo botão *Registrar pagamento* da ficha (ou menu Pagamentos), o valor vem preenchido com o
+  que falta no mês (editável); informe a forma (Pix, Dinheiro, Transferência) e quem recebeu (Sergio/Fagner).
+  A coluna **Faltante** mostra o que falta em pagamentos parciais (complementos do mesmo mês são abatidos).
+- **Relatórios** (abas *Mensal* e *Inquilinos em débito*): o mensal lista os valores recebidos no mês (pela data
+  do pagamento), as despesas e o saldo a repassar, com exportação em PDF/Excel; o de débito mostra, por
+  inquilino, os meses vencidos e não pagos desde o início do aluguel.

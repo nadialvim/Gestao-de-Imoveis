@@ -1,0 +1,32 @@
+{# Lista de aluguéis. Variáveis: contratos, mostrar ('imovel' ou 'inquilino'), acoes (bool) #}
+<div class="table-responsive">
+  <table class="table align-middle">
+    <thead><tr>
+      <th>{{ 'Imóvel / vaga' if mostrar == 'imovel' else 'Inquilino' }}</th><th>Período</th>
+      <th class="text-end">Valor</th><th>Vence dia</th><th>Situação</th>{% if acoes %}<th class="text-end">Ações</th>{% endif %}
+    </tr></thead>
+    <tbody>
+      {% for c in contratos %}
+      <tr>
+        <td>{% if mostrar == 'imovel' %}<a class="text-decoration-none fw-semibold" href="{{ url_for('fichas.imovel', id=c.imovel_id) }}">{{ c.imovel }}</a>
+            {% else %}<a class="text-decoration-none fw-semibold" href="{{ url_for('fichas.inquilino', id=c.inquilino_id) }}">{{ c.inquilino.nome }}</a>{% endif %}</td>
+        <td>{{ c.data_inicio|data_br }} a {{ c.data_fim|data_br }}</td>
+        <td class="text-end text-money">{{ c.valor_mensal|brl }}</td>
+        <td>{{ c.dia_vencimento }}</td>
+        <td>{% if c.ativo %}<span class="badge badge-soft-success">Ativo</span>{% else %}<span class="badge badge-soft-secondary">Encerrado{% if c.encerrado_em %} em {{ c.encerrado_em|data_br }}{% endif %}</span>{% endif %}</td>
+        {% if acoes %}
+        <td class="text-end text-nowrap">
+          {% if c.ativo %}
+          <a class="btn btn-sm btn-outline-primary" href="{{ url_for('crud.novo', slug='pagamentos', contrato_id=c.id, next=request.path) }}"><i class="bi bi-cash-coin me-1"></i>Registrar pagamento</a>
+          <button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#modalBaixa"
+                  data-action="{{ url_for('fichas.baixar', id=c.id) }}" data-nome="{{ c }}"><i class="bi bi-box-arrow-in-left me-1"></i>Dar baixa</button>
+          {% endif %}
+        </td>
+        {% endif %}
+      </tr>
+      {% else %}
+      <tr><td colspan="6"><div class="empty py-3">Nenhum aluguel.</div></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

@@ -72,12 +72,14 @@ def create_app(config=None):
     from . import models  # noqa: F401
     from .auth import bp as auth_bp
     from .crud import bp as crud_bp
+    from .routes.fichas import bp as fichas_bp
     from .routes.main import bp as main_bp
     from .formatting import register_filters
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
     app.register_blueprint(crud_bp)
+    app.register_blueprint(fichas_bp)
     register_filters(app)
 
     def csrf_token():

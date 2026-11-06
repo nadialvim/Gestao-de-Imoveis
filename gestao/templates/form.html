@@ -1,22 +1,24 @@
 {% extends "base.html" %}
 {% block title %}{{ titulo }}{% endblock %}
 {% block heading %}{{ titulo }}{% endblock %}
+{% set voltar = proximo or (url_for(res.ficha, id=obj.id) if res.ficha and obj.id else (url_for('crud.listar', slug=res.slug) if res.lista else url_for('main.dashboard'))) %}
 {% block actions %}
-  <a class="btn btn-outline-secondary" href="{{ url_for('crud.listar', slug=res.slug) }}"><i class="bi bi-arrow-left me-1"></i>Voltar</a>
+  <a class="btn btn-outline-secondary" href="{{ voltar }}"><i class="bi bi-arrow-left me-1"></i>Voltar</a>
 {% endblock %}
 {% block content %}
 <div class="card" style="max-width: 880px;">
   <div class="card-body p-4">
     <form method="post" {% if res.slug == 'pagamentos' and not obj.id %}data-sugestao="{{ url_for('crud.sugestao_pagamento') }}"{% endif %}>
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-      {% if res.slug == 'contratos' %}
-      <div class="alert alert-info py-2 small"><i class="bi bi-info-circle me-1"></i>O valor mensal é o <strong>valor do aluguel cadastrado no imóvel/vaga</strong> (não é digitado aqui). Para reajustar, altere o valor no imóvel.</div>
+      {% if proximo %}<input type="hidden" name="next" value="{{ proximo }}">{% endif %}
+      {% if res.slug == 'alugueis' %}
+      <div class="alert alert-info py-2 small"><i class="bi bi-info-circle me-1"></i>O valor mensal é o <strong>valor do aluguel cadastrado em cada imóvel/vaga</strong> (não é digitado aqui). Para reajustar, altere o valor na ficha do imóvel. Para alugar mais de um (ex.: apartamento + vaga), selecione vários com Ctrl (ou Cmd).</div>
       {% endif %}
       <div class="row g-3">
         {% for f in res.fields + res.extra_fields %}
-        {% set v = valores.get(f.name, '') %}
+        {% set v = valores.getlist(f.name) if f.kind == 'multi' and valores.getlist is defined else valores.get(f.name, '') %}
         {% if f.section %}<div class="col-12 mt-4"><h2 class="h6 text-uppercase text-muted border-bottom pb-2 mb-0">{{ f.section }}</h2></div>{% endif %}
-        <div class="col-12 {{ '' if f.wide or f.kind == 'bool' else 'col-md-6' }}">
+        <div class="col-12 {{ '' if f.wide or f.kind in ('bool', 'multi') else 'col-md-6' }}">
           {% if f.kind == 'bool' %}
           <div class="form-check form-switch pt-md-4">
             <input class="form-check-input" type="checkbox" role="switch" id="{{ f.name }}" name="{{ f.name }}"
@@ -25,7 +27,14 @@
           </div>
           {% else %}
           <label class="form-label" for="{{ f.name }}">{{ f.label }}{% if not f.required %} <small class="text-muted fw-normal">(opcional)</small>{% endif %}</label>
-          {% if f.kind in ('select', 'choice') %}
+          {% if f.kind == 'multi' %}
+          <select class="form-select" id="{{ f.name }}" name="{{ f.name }}" multiple size="6" {% if f.required %}required{% endif %}>
+            {% for val, label in f.opcoes(obj) %}
+            <option value="{{ val }}" {% if val|string in (v or [])|map('string')|list %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          <div class="form-text">Só aparecem imóveis e vagas disponíveis. Segure Ctrl (ou Cmd) para escolher mais de um.</div>
+          {% elif f.kind in ('select', 'choice') %}
           <select class="form-select" id="{{ f.name }}" name="{{ f.name }}" {% if f.required %}required{% endif %}>
             <option value="">— selecione —</option>
             {% for val, label in f.opcoes(obj) %}
@@ -59,47 +68,16 @@
       </div>
       <div class="form-actions">
         <button class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Salvar</button>
-        <a class="btn btn-outline-secondary" href="{{ url_for('crud.listar', slug=res.slug) }}">Cancelar</a>
+        <a class="btn btn-outline-secondary" href="{{ voltar }}">Cancelar</a>
       </div>
     </form>
   </div>
 </div>
-{% if res.slug == 'inquilinos' and obj.id %}
-<div class="card mt-4" style="max-width: 880px;">
-  <div class="card-header"><i class="bi bi-key me-1"></i>Aluguéis deste inquilino ({{ obj.contratos|length }})</div>
-  <div class="table-responsive">
-    <table class="table align-middle">
-      <thead><tr><th>Imóvel / vaga</th><th>Período</th><th class="text-end">Valor</th><th>Situação</th></tr></thead>
-      <tbody>
-        {% for c in obj.contratos %}
-        <tr><td>{{ c.imovel }}</td><td>{{ c.data_inicio|data_br }} a {{ c.data_fim|data_br }}</td>
-            <td class="text-end text-money">{{ c.valor_mensal|brl }}</td>
-            <td>{% if c.ativo %}<span class="badge badge-soft-success">Ativo</span>{% else %}<span class="badge badge-soft-secondary">Encerrado{% if c.encerrado_em %} em {{ c.encerrado_em|data_br }}{% endif %}</span>{% endif %}</td></tr>
-        {% else %}
-        <tr><td colspan="4"><div class="empty py-3">Nenhum aluguel ainda. Use a seção "Aluguel" acima para vincular um imóvel.</div></td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
-{% endif %}
-{% if res.slug == 'predios' and obj.id %}
-<div class="card mt-4" style="max-width: 880px;">
-  <div class="card-header"><i class="bi bi-buildings me-1"></i>Unidades deste prédio ({{ obj.imoveis|length }})</div>
-  <div class="table-responsive">
-    <table class="table align-middle">
-      <thead><tr><th>Tipo</th><th>Identificação</th><th>Situação</th><th>Inquilino atual</th></tr></thead>
-      <tbody>
-        {% for i in obj.imoveis %}
-        <tr><td>{{ i.tipo_nome }}</td><td><a href="{{ url_for('crud.editar', slug='imoveis', id=i.id) }}">{{ i.identificacao }}</a></td>
-            <td>{% if i.disponivel %}<span class="badge badge-soft-success">Disponível</span>{% else %}<span class="badge badge-soft-warning">Alugado</span>{% endif %}</td>
-            <td>{{ i.contrato_ativo.inquilino.nome if i.contrato_ativo else '' }}</td></tr>
-        {% else %}
-        <tr><td colspan="4"><div class="empty py-3">Nenhuma unidade cadastrada.</div></td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
+{% if res.ficha and obj.id %}
+<form method="post" action="{{ url_for('crud.excluir', slug=res.slug, id=obj.id) }}" class="mt-3"
+      onsubmit="return confirm('Excluir este registro? Esta ação não pode ser desfeita.');">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash me-1"></i>Excluir {{ res.singular|lower }}</button>
+</form>
 {% endif %}
 {% endblock %}

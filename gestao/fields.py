@@ -19,7 +19,8 @@ class Badge:
 class Field:
     name: str
     label: str
-    # text, money, int, date, month, bool, select (id inteiro), choice (texto), lista
+    # text, money, int, date, month, bool, select (id inteiro), multi (vários ids),
+    # choice (texto), lista
     kind: str = "text"
     required: bool = True
     choices: Optional[Callable] = None  # select/choice: ([obj]) -> [(valor, rótulo)]
@@ -39,6 +40,18 @@ class Field:
     def parse(self, raw):
         if self.kind == "bool":
             return raw is not None
+        if self.kind == "multi":
+            ids = []
+            for item in raw or []:
+                if str(item).strip():
+                    try:
+                        ids.append(int(item))
+                    except ValueError:
+                        raise ValueError("valor inválido")
+            ids = list(dict.fromkeys(ids))
+            if not ids and self.required:
+                raise ValueError("campo obrigatório")
+            return ids
         if self.kind == "lista":
             from .services.unidades import parse_lista
 
@@ -78,6 +91,8 @@ class Field:
         """Converte o valor do objeto para string do <input>."""
         if value is None:
             return ""
+        if isinstance(value, (list, tuple)):
+            return [str(v) for v in value]
         if self.kind == "month":
             return value.strftime("%Y-%m")
         if self.kind == "date":
@@ -105,3 +120,8 @@ class Resource:
     before_save: Optional[Callable] = None  # (obj, dados) -> None (antes do commit)
     # filtros da listagem: [(coluna, rótulo, [(valor, texto)])] via ?coluna=valor
     filters: list = field(default_factory=list)
+    ficha: Optional[str] = None  # endpoint da ficha (detalhe); 1ª coluna vira link e vira destino
+    destino: Optional[Callable] = None  # (obj, dados) -> url após salvar (substitui a lista)
+    sem_modelo: bool = False  # formulário que só dispara before_save (não grava o objeto)
+    lista: bool = True  # False = sem tela de listagem própria
+    titulo_novo: Optional[str] = None  # título do formulário de criação

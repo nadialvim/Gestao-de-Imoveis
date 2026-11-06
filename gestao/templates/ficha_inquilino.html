@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ q.nome }}{% endblock %}
+{% block heading %}{{ q.nome }}{% endblock %}
+{% block subtitle %}<div class="sub">
+  {% if q.telefone %}<i class="bi bi-telephone me-1"></i>{{ q.telefone }}{% endif %}
+  {% if q.email %}<span class="ms-3"><i class="bi bi-envelope me-1"></i>{{ q.email }}</span>{% endif %}
+  {% if q.documento %}<span class="ms-3"><i class="bi bi-person-vcard me-1"></i>{{ q.documento }}</span>{% endif %}
+</div>{% endblock %}
+{% block actions %}
+  <a class="btn btn-primary" href="{{ url_for('crud.novo', slug='alugueis', inquilino_id=q.id) }}"><i class="bi bi-key me-1"></i>Novo aluguel</a>
+  <a class="btn btn-outline-secondary" href="{{ url_for('crud.editar', slug='inquilinos', id=q.id) }}"><i class="bi bi-pencil me-1"></i>Editar</a>
+{% endblock %}
+{% block content %}
+{% if debito %}
+<div class="alert alert-danger">
+  <i class="bi bi-exclamation-triangle me-1"></i><strong>Em débito: {{ debito.total|brl }}</strong>
+  ({{ debito.meses|length }} mês(es) vencido(s) em aberto: {% for m in debito.meses %}{{ m.competencia|mes_br }}{{ ', ' if not loop.last }}{% endfor %})
+</div>
+{% endif %}
+
+<div class="card mb-4">
+  <div class="card-header"><i class="bi bi-key me-1"></i>Aluguéis ativos</div>
+  {% set contratos = q.alugueis_ativos %}{% set mostrar = 'imovel' %}{% set acoes = true %}
+  {% include "_tabela_alugueis.html" %}
+</div>
+
+<div class="card mb-4">
+  <div class="card-header"><i class="bi bi-cash-coin me-1"></i>Pagamentos recentes</div>
+  {% include "_tabela_pagamentos.html" %}
+</div>
+
+{% set encerrados = q.contratos|rejectattr('ativo')|list %}
+{% if encerrados %}
+<div class="card mb-4">
+  <div class="card-header"><i class="bi bi-clock-history me-1"></i>Histórico (encerrados)</div>
+  {% set contratos = encerrados %}{% set mostrar = 'imovel' %}{% set acoes = false %}
+  {% include "_tabela_alugueis.html" %}
+</div>
+{% endif %}
+{% include "_modal_baixa.html" %}
+{% endblock %}

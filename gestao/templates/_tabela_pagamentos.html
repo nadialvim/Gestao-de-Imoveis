@@ -1,0 +1,13 @@
+<div class="table-responsive">
+  <table class="table align-middle">
+    <thead><tr><th>Data</th><th>Referência</th><th>Aluguel</th><th class="text-end">Valor</th><th>Recebido por</th></tr></thead>
+    <tbody>
+      {% for p in pagamentos %}
+      <tr><td>{{ p.data_pagamento|data_br }}</td><td>{{ p.competencia|mes_br }}</td><td>{{ p.contrato }}</td>
+          <td class="text-end text-money">{{ p.valor_pago|brl }}</td><td>{{ p.recebido_por or '' }}</td></tr>
+      {% else %}
+      <tr><td colspan="5"><div class="empty py-3">Nenhum pagamento registrado.</div></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

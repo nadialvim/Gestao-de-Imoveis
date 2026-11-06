@@ -21,15 +21,18 @@ class Predio(db.Model):
 
 
 class Imovel(db.Model):
-    """Apartamento e loja (vinculados a um prédio) ou casa (independente)."""
+    """Unidade alugável: apartamento e loja (de um prédio), casa (independente)
+    ou vaga de garagem (prédio opcional)."""
     __tablename__ = "imoveis"
     __table_args__ = (
-        db.CheckConstraint("tipo in ('apartamento','casa','loja')", name="imoveis_tipo_chk"),
+        db.CheckConstraint("tipo in ('apartamento','casa','loja','vaga')", name="imoveis_tipo_chk"),
         db.CheckConstraint(
-            "(tipo = 'casa' and predio_id is null) or (tipo <> 'casa' and predio_id is not null)",
+            "tipo = 'vaga' or (tipo = 'casa' and predio_id is null) "
+            "or (tipo in ('apartamento','loja') and predio_id is not null)",
             name="imoveis_predio_chk"),
     )
-    TIPOS = [("apartamento", "Apartamento"), ("casa", "Casa"), ("loja", "Loja")]
+    TIPOS = [("apartamento", "Apartamento"), ("casa", "Casa"), ("loja", "Loja"),
+             ("vaga", "Vaga de garagem")]
     id = db.Column(db.Integer, primary_key=True)
     tipo = db.Column(db.String(20), nullable=False, default="apartamento")
     predio_id = db.Column(db.Integer, db.ForeignKey("predios.id"))
@@ -37,7 +40,8 @@ class Imovel(db.Model):
     descricao = db.Column(db.String(255))
     valor_aluguel_padrao = db.Column(db.Numeric(12, 2))
     predio = db.relationship("Predio", back_populates="imoveis")
-    contratos = db.relationship("Contrato", viewonly=True)
+    contratos = db.relationship("Contrato", viewonly=True,
+                                order_by="Contrato.data_inicio.desc()")
 
     @property
     def tipo_nome(self):
@@ -54,31 +58,9 @@ class Imovel(db.Model):
     def __str__(self):
         if self.tipo == "casa":
             return f"Casa {self.identificacao}"
-        rotulo = "Apto" if self.tipo == "apartamento" else "Loja"
+        rotulo = {"apartamento": "Apto", "loja": "Loja", "vaga": "Vaga"}.get(self.tipo, "")
         prefixo = f"{self.predio.nome} - " if self.predio else ""
         return f"{prefixo}{rotulo} {self.identificacao}"
-
-
-class Vaga(db.Model):
-    __tablename__ = "vagas"
-    id = db.Column(db.Integer, primary_key=True)
-    predio_id = db.Column(db.Integer, db.ForeignKey("predios.id"))
-    identificacao = db.Column(db.String(60), nullable=False)
-    valor_aluguel_padrao = db.Column(db.Numeric(12, 2))
-    predio = db.relationship("Predio")
-    contratos = db.relationship("Contrato", viewonly=True)
-
-    @property
-    def contrato_ativo(self):
-        return next((c for c in self.contratos if c.ativo), None)
-
-    @property
-    def disponivel(self):
-        return self.contrato_ativo is None
-
-    def __str__(self):
-        base = f"Vaga {self.identificacao}"
-        return f"{self.predio.nome} - {base}" if self.predio else base
 
 
 class Inquilino(db.Model):
@@ -99,11 +81,11 @@ class Inquilino(db.Model):
 
 
 class Contrato(db.Model):
+    """Aluguel de um imóvel/vaga por um inquilino (na interface: "Aluguel")."""
     __tablename__ = "contratos"
     id = db.Column(db.Integer, primary_key=True)
     inquilino_id = db.Column(db.Integer, db.ForeignKey("inquilinos.id"), nullable=False)
-    imovel_id = db.Column(db.Integer, db.ForeignKey("imoveis.id"))
-    vaga_id = db.Column(db.Integer, db.ForeignKey("vagas.id"))
+    imovel_id = db.Column(db.Integer, db.ForeignKey("imoveis.id"), nullable=False)
     data_inicio = db.Column(db.Date, nullable=False)
     data_fim = db.Column(db.Date, nullable=False)
     valor_mensal = db.Column(db.Numeric(12, 2), nullable=False)
@@ -111,13 +93,7 @@ class Contrato(db.Model):
     ativo = db.Column(db.Boolean, nullable=False, default=True)
     encerrado_em = db.Column(db.Date)  # data da devolução (baixa); ativo=False
     inquilino = db.relationship("Inquilino")
-    imovel_rel = db.relationship("Imovel", overlaps="contratos")
-    vaga = db.relationship("Vaga", overlaps="contratos")
-
-    @property
-    def imovel(self):
-        """Imóvel ou vaga alugado neste contrato."""
-        return self.imovel_rel or self.vaga
+    imovel = db.relationship("Imovel", overlaps="contratos")
 
     def __str__(self):
         return f"{self.inquilino} — {self.imovel}"

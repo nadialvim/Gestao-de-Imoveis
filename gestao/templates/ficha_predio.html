@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}{{ p.nome }}{% endblock %}
+{% block heading %}{{ p.nome }}{% endblock %}
+{% block subtitle %}<div class="sub">{% if p.endereco %}<i class="bi bi-geo-alt me-1"></i>{{ p.endereco }}{% endif %}</div>{% endblock %}
+{% block actions %}
+  <a class="btn btn-primary" href="{{ url_for('crud.editar', slug='predios', id=p.id) }}"><i class="bi bi-plus-lg me-1"></i>Adicionar unidades</a>
+  <a class="btn btn-outline-primary" href="{{ url_for('crud.novo', slug='despesas', predio_id=p.id, next=request.path) }}"><i class="bi bi-receipt me-1"></i>Registrar despesa</a>
+{% endblock %}
+{% block content %}
+<div class="row g-3 mb-4">
+  <div class="col-12 col-md-4"><div class="card kpi"><div class="icon icon-blue"><i class="bi bi-door-open"></i></div>
+    <div><div class="label">Unidades</div><div class="value">{{ p.imoveis|length }}</div></div></div></div>
+  <div class="col-12 col-md-4"><div class="card kpi"><div class="icon icon-green"><i class="bi bi-key"></i></div>
+    <div><div class="label">Alugadas</div><div class="value">{{ alugadas }} <small class="text-muted fs-6 fw-normal">de {{ p.imoveis|length }}</small></div></div></div></div>
+  <div class="col-12 col-md-4"><div class="card kpi"><div class="icon icon-blue"><i class="bi bi-wallet2"></i></div>
+    <div><div class="label">Receita mensal (alugadas)</div><div class="value">{{ receita|brl }}</div></div></div></div>
+</div>
+
+{% for nome, unidades in grupos %}
+<div class="card mb-4">
+  <div class="card-header">{{ nome }} <span class="text-muted fw-normal">({{ unidades|length }})</span></div>
+  <div class="card-body">
+    <div class="unit-grid">
+      {% for u in unidades %}
+      <a class="unit {{ 'unit-livre' if u.disponivel else 'unit-alugada' }}" href="{{ url_for('fichas.imovel', id=u.id) }}"
+         title="{{ 'Disponível' if u.disponivel else 'Alugado: ' ~ u.contrato_ativo.inquilino.nome }}">
+        <span class="unit-id">{{ u.identificacao }}</span>
+        <span class="unit-st">{{ 'Disponível' if u.disponivel else u.contrato_ativo.inquilino.nome }}</span>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="card mb-4"><div class="empty"><i class="bi bi-door-closed"></i>Nenhuma unidade cadastrada. Use <strong>Adicionar unidades</strong>.</div></div>
+{% endfor %}
+
+<div class="card mb-4">
+  <div class="card-header"><i class="bi bi-receipt me-1"></i>Despesas recentes do prédio</div>
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th class="text-end">Valor</th></tr></thead>
+      <tbody>
+        {% for x in despesas %}
+        <tr><td>{{ x.data|data_br }}</td><td>{{ x.descricao }}</td><td>{{ x.categoria or '' }}</td><td class="text-end text-money">{{ x.valor|brl }}</td></tr>
+        {% else %}
+        <tr><td colspan="4"><div class="empty py-3">Nenhuma despesa vinculada a este prédio.</div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

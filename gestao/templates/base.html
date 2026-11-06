@@ -16,6 +16,9 @@
 {% if logado %}
 {% set slug = (request.view_args or {}).get('slug') %}
 {% set ep = request.endpoint %}
+{% set sec_imoveis = slug in ('imoveis', 'predios') or ep in ('fichas.predio', 'fichas.imovel') %}
+{% set sec_inquilinos = slug in ('inquilinos', 'alugueis') or ep == 'fichas.inquilino' %}
+{% set sec_relatorios = ep in ('main.relatorios', 'main.debitos') %}
 {% macro item(href, icone, texto, ativo) -%}
   <a class="nav-link {{ 'active' if ativo }}" href="{{ href }}"><i class="bi bi-{{ icone }}"></i><span>{{ texto }}</span></a>
 {%- endmacro %}
@@ -24,17 +27,11 @@
   <a class="brand" href="{{ url_for('main.dashboard') }}"><i class="bi bi-buildings"></i><span>Gestão de Imóveis</span></a>
   <nav class="side-scroll nav flex-column">
     {{ item(url_for('main.dashboard'), 'speedometer2', 'Início', ep == 'main.dashboard') }}
-    <div class="nav-section">Cadastros</div>
-    {{ item(url_for('crud.listar', slug='predios'), 'building', 'Prédios', slug == 'predios') }}
-    {{ item(url_for('crud.listar', slug='imoveis'), 'house-door', 'Imóveis', slug == 'imoveis') }}
-    {{ item(url_for('crud.listar', slug='vagas'), 'car-front', 'Vagas de garagem', slug == 'vagas') }}
-    {{ item(url_for('crud.listar', slug='inquilinos'), 'people', 'Inquilinos', slug == 'inquilinos') }}
-    <div class="nav-section">Financeiro</div>
-    {{ item(url_for('crud.listar', slug='contratos'), 'file-earmark-text', 'Contratos', slug == 'contratos') }}
+    {{ item(url_for('crud.listar', slug='imoveis'), 'house-door', 'Imóveis', sec_imoveis) }}
+    {{ item(url_for('crud.listar', slug='inquilinos'), 'people', 'Inquilinos', sec_inquilinos) }}
     {{ item(url_for('crud.listar', slug='pagamentos'), 'cash-coin', 'Pagamentos', slug == 'pagamentos') }}
     {{ item(url_for('crud.listar', slug='despesas'), 'receipt', 'Despesas', slug == 'despesas') }}
-    {{ item(url_for('main.relatorios'), 'bar-chart-line', 'Relatórios', ep in ('main.relatorios',)) }}
-    {{ item(url_for('main.debitos'), 'exclamation-triangle', 'Em débito', ep == 'main.debitos') }}
+    {{ item(url_for('main.relatorios'), 'bar-chart-line', 'Relatórios', sec_relatorios) }}
   </nav>
   <form method="post" action="{{ url_for('auth.logout') }}" class="user-box">
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
@@ -58,6 +55,20 @@
         </div>
       {% endfor %}
     {% endwith %}
+    {% if sec_imoveis or sec_relatorios %}
+    {% if sec_imoveis %}
+      {% set abas = [('Imóveis', url_for('crud.listar', slug='imoveis'), slug == 'imoveis' or ep == 'fichas.imovel'),
+                     ('Prédios', url_for('crud.listar', slug='predios'), slug == 'predios' or ep == 'fichas.predio')] %}
+    {% else %}
+      {% set abas = [('Mensal', url_for('main.relatorios'), ep == 'main.relatorios'),
+                     ('Inquilinos em débito', url_for('main.debitos'), ep == 'main.debitos')] %}
+    {% endif %}
+    <ul class="nav nav-tabs-soft mb-3">
+      {% for rotulo, href, ativa in abas %}
+      <li class="nav-item"><a class="nav-link {{ 'active' if ativa }}" href="{{ href }}">{{ rotulo }}</a></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
     <div class="page-header">
       <div>
         <h1>{% block heading %}{% endblock %}</h1>
@@ -71,9 +82,10 @@
 
 <nav class="bottom-bar" aria-label="Atalhos">
   <a href="{{ url_for('main.dashboard') }}" class="{{ 'active' if ep == 'main.dashboard' }}"><i class="bi bi-speedometer2"></i>Início</a>
+  <a href="{{ url_for('crud.listar', slug='imoveis') }}" class="{{ 'active' if sec_imoveis }}"><i class="bi bi-house-door"></i>Imóveis</a>
+  <a href="{{ url_for('crud.listar', slug='inquilinos') }}" class="{{ 'active' if sec_inquilinos }}"><i class="bi bi-people"></i>Inquilinos</a>
   <a href="{{ url_for('crud.listar', slug='pagamentos') }}" class="{{ 'active' if slug == 'pagamentos' }}"><i class="bi bi-cash-coin"></i>Pagamentos</a>
-  <a href="{{ url_for('crud.listar', slug='despesas') }}" class="{{ 'active' if slug == 'despesas' }}"><i class="bi bi-receipt"></i>Despesas</a>
-  <a href="{{ url_for('main.relatorios') }}" class="{{ 'active' if ep == 'main.relatorios' }}"><i class="bi bi-bar-chart-line"></i>Relatórios</a>
+  <a href="{{ url_for('main.relatorios') }}" class="{{ 'active' if sec_relatorios }}"><i class="bi bi-bar-chart-line"></i>Relatórios</a>
 </nav>
 {% else %}
   {% block bare %}{% endblock %}

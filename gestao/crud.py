@@ -22,14 +22,37 @@ def _res(slug):
     return res
 
 
+def destino_seguro(url):
+    """Aceita apenas caminhos internos (evita redirecionamento aberto)."""
+    if url and url.startswith("/") and not url.startswith("//") and "\\" not in url:
+        return url
+    return None
+
+
+def _proximo():
+    return destino_seguro(request.form.get("next") or request.args.get("next"))
+
+
+# ---------- endereços antigos ----------
 @bp.route("/apartamentos/")
 def apartamentos_antigo():
     return redirect(url_for("crud.listar", slug="imoveis"))
 
 
+@bp.route("/vagas/")
+def vagas_antigo():
+    return redirect(url_for("crud.listar", slug="imoveis", tipo="vaga"))
+
+
+@bp.route("/contratos/")
+def contratos_antigo():
+    return redirect(url_for("crud.listar", slug="inquilinos"))
+
+
+# ---------- pagamento: sugestão de valor ----------
 @bp.route("/pagamentos/sugestao")
 def sugestao_pagamento():
-    """Valor do contrato, já recebido e faltante no mês (para pré-preencher o pagamento)."""
+    """Valor do aluguel, já recebido e faltante no mês (pré-preenche o pagamento)."""
     contrato = db.session.get(Contrato, request.args.get("contrato_id", 0, type=int))
     if contrato is None:
         return jsonify({}), 404
@@ -43,9 +66,12 @@ def sugestao_pagamento():
                    falta=f"{max(Decimal('0'), valor - recebido):.2f}")
 
 
+# ---------- CRUD genérico ----------
 @bp.route("/<slug>/")
 def listar(slug):
     res = _res(slug)
+    if not res.lista:
+        return redirect(url_for("main.dashboard"))
     query = res.model.query
     mes = None
     if res.month_field:
@@ -54,17 +80,21 @@ def listar(slug):
         col = getattr(res.model, res.month_field)
         query = query.filter(col >= inicio, col <= fim)
         mes = f"{ano:04d}-{m:02d}"
-    filtros = []
+    filtros, situacao = [], ""
     for coluna, rotulo, opcoes in res.filters:
         atual = request.args.get(coluna, "")
-        if atual in {str(v) for v, _ in opcoes}:
-            query = query.filter(getattr(res.model, coluna) == atual)
-        else:
+        if atual not in {str(v) for v, _ in opcoes}:
             atual = ""
+        if atual and coluna == "situacao":
+            situacao = atual  # filtro calculado (disponível/alugado), aplicado em Python
+        elif atual:
+            query = query.filter(getattr(res.model, coluna) == atual)
         filtros.append({"nome": coluna, "rotulo": rotulo, "opcoes": opcoes, "atual": atual})
     if res.order:
         query = query.order_by(*res.order())
     objetos = query.all()
+    if situacao:
+        objetos = [o for o in objetos if o.disponivel == (situacao == "disponivel")]
     linhas = [(o.id, [fn(o) for _, fn in res.columns], o) for o in objetos]
     return render_template(
         "list.html", res=res, linhas=linhas, mes=mes, filtros=filtros,
@@ -78,17 +108,22 @@ def _valores_iniciais(res, obj):
                 for f in res.fields}
     base = res.new_defaults() if res.new_defaults else {}
     valores = {f.name: f.to_input(base.get(f.name, f.default)) for f in res.fields}
-    for f in res.fields:  # valores iniciais pela URL (ex.: ?imovel_id=3 no botão Alugar)
+    for f in res.fields:  # valores iniciais pela URL (ex.: ?aluguel_imoveis=3)
         if f.name in request.args:
-            valores[f.name] = request.args[f.name]
+            valores[f.name] = (request.args.getlist(f.name) if f.kind == "multi"
+                               else request.args[f.name])
     return valores
+
+
+def _valor_bruto(f):
+    return request.form.getlist(f.name) if f.kind == "multi" else request.form.get(f.name)
 
 
 def _salvar(res, obj):
     dados, erros = {}, []
     for f in list(res.fields) + list(res.extra_fields):
         try:
-            dados[f.name] = f.parse(request.form.get(f.name))
+            dados[f.name] = f.parse(_valor_bruto(f))
         except ValueError as exc:
             erros.append(f"{f.label}: {exc}")
     if not erros and res.validate:
@@ -97,12 +132,13 @@ def _salvar(res, obj):
         for e in erros:
             flash(e, "danger")
         return False
-    for f in res.fields:
-        if not f.extra:
-            setattr(obj, f.name, dados[f.name])
+    if not res.sem_modelo:
+        for f in res.fields:
+            if not f.extra:
+                setattr(obj, f.name, dados[f.name])
     if res.before_save:
         res.before_save(obj, dados)
-    if obj.id is None:
+    if obj.id is None and not res.sem_modelo:
         db.session.add(obj)
     try:
         db.session.commit()
@@ -115,25 +151,37 @@ def _salvar(res, obj):
         mensagem = res.after_save(obj, dados)
         if mensagem:
             flash(mensagem, "info")
+    obj._dados_salvos = dados
     return True
+
+
+def _url_depois(res, obj):
+    proximo = _proximo()
+    if proximo:
+        return proximo
+    if res.destino:
+        return res.destino(obj, getattr(obj, "_dados_salvos", {}))
+    if res.ficha and obj.id:
+        return url_for(res.ficha, id=obj.id)
+    return url_for("crud.listar", slug=res.slug)
 
 
 def _form(res, obj, titulo):
     if request.method == "POST":
         if _salvar(res, obj):
-            return redirect(url_for("crud.listar", slug=res.slug))
+            return redirect(_url_depois(res, obj))
         db.session.rollback()
         valores = request.form
     else:
         valores = _valores_iniciais(res, obj)
     return render_template("form.html", res=res, valores=valores, titulo=titulo,
-                           obj=obj)
+                           obj=obj, proximo=_proximo() or "")
 
 
 @bp.route("/<slug>/novo", methods=["GET", "POST"])
 def novo(slug):
     res = _res(slug)
-    return _form(res, res.model(), f"Novo(a) {res.singular}")
+    return _form(res, res.model(), res.titulo_novo or f"Novo(a) {res.singular}")
 
 
 @bp.route("/<slug>/<int:id>/editar", methods=["GET", "POST"])
@@ -155,28 +203,3 @@ def excluir(slug, id):
         db.session.rollback()
         flash("Não é possível excluir: há registros vinculados.", "danger")
     return redirect(url_for("crud.listar", slug=slug))
-
-
-@bp.route("/contratos/<int:id>/baixa", methods=["POST"])
-def baixar_contrato(id):
-    """Dá baixa no aluguel (devolução do imóvel/vaga), liberando-o para nova locação."""
-    contrato = db.get_or_404(Contrato, id)
-    voltar = request.form.get("voltar")
-    destino = redirect(url_for("crud.listar",
-                               slug=voltar if voltar in ("imoveis", "vagas") else "contratos"))
-    if not contrato.ativo:
-        flash("Este contrato já foi encerrado.", "warning")
-        return destino
-    try:
-        data = date.fromisoformat(request.form.get("data_devolucao", ""))
-    except ValueError:
-        flash("Informe a data de devolução.", "danger")
-        return destino
-    if data < contrato.data_inicio:
-        flash("A devolução não pode ser anterior ao início do contrato.", "danger")
-        return destino
-    contrato.ativo = False
-    contrato.encerrado_em = data
-    db.session.commit()
-    flash(f"Baixa registrada: {contrato.imovel} está disponível para locação.", "success")
-    return destino

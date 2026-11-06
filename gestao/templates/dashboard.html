@@ -2,11 +2,32 @@
 {% block title %}Início — Gestão de Imóveis{% endblock %}
 {% block heading %}Resumo de {{ d.competencia|mes_br }}{% endblock %}
 {% block actions %}
-  <a class="btn btn-primary" href="{{ url_for('crud.novo', slug='pagamentos') }}"><i class="bi bi-plus-lg me-1"></i>Registrar pagamento</a>
-  <a class="btn btn-outline-primary" href="{{ url_for('crud.novo', slug='despesas') }}"><i class="bi bi-plus-lg me-1"></i>Registrar despesa</a>
+  <a class="btn btn-primary" href="{{ url_for('crud.novo', slug='alugueis') }}"><i class="bi bi-key me-1"></i>Novo aluguel</a>
+  <a class="btn btn-outline-primary" href="{{ url_for('crud.novo', slug='pagamentos') }}"><i class="bi bi-cash-coin me-1"></i>Registrar pagamento</a>
+  <a class="btn btn-outline-primary" href="{{ url_for('crud.novo', slug='despesas') }}"><i class="bi bi-receipt me-1"></i>Nova despesa</a>
 {% endblock %}
 {% block content %}
 {% include "_resumo.html" %}
+<div class="row g-3 mb-4">
+  <div class="col-12 col-md-6">
+    <a class="card kpi text-decoration-none text-reset" href="{{ url_for('crud.listar', slug='imoveis') }}">
+      <div class="icon icon-blue"><i class="bi bi-house-check"></i></div>
+      <div>
+        <div class="label">Ocupação</div>
+        <div class="value">{{ ocupacao.alugados }} de {{ ocupacao.total }} <small class="text-muted fs-6 fw-normal">alugados · {{ ocupacao.livres }} disponíveis</small></div>
+      </div>
+    </a>
+  </div>
+  <div class="col-12 col-md-6">
+    <a class="card kpi text-decoration-none text-reset" href="{{ url_for('main.debitos') }}">
+      <div class="icon icon-red"><i class="bi bi-exclamation-triangle"></i></div>
+      <div>
+        <div class="label">Total em débito</div>
+        <div class="value">{{ debito.total|brl }} <small class="text-muted fs-6 fw-normal">{{ debito.inquilinos|length }} inquilino(s)</small></div>
+      </div>
+    </a>
+  </div>
+</div>
 <div class="card mb-4">
   <div class="card-header"><i class="bi bi-bar-chart me-1"></i>Recebido x Despesas (últimos 6 meses)</div>
   <div class="card-body">

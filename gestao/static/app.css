@@ -131,3 +131,21 @@ body { font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif; f
 .login-card { width: 100%; max-width: 400px; padding: 2rem; border-radius: 16px; box-shadow: 0 20px 50px rgba(0,0,0,.25); border: 0; }
 .login-card .logo { width: 56px; height: 56px; border-radius: 16px; background: var(--accent); color: #fff;
   display: grid; place-items: center; font-size: 1.7rem; margin: 0 auto 1rem; }
+
+/* ---------- Abas, fichas, grade de unidades ---------- */
+.nav-tabs-soft { display: flex; gap: .25rem; border-bottom: 1px solid var(--card-border); padding: 0; list-style: none; }
+.nav-tabs-soft .nav-link { color: var(--muted); font-weight: 500; padding: .55rem 1rem; border: 0; border-bottom: 2px solid transparent; border-radius: 0; margin-bottom: -1px; }
+.nav-tabs-soft .nav-link:hover { color: var(--ink); }
+.nav-tabs-soft .nav-link.active { color: var(--accent); border-bottom-color: var(--accent); }
+.info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1rem 1.5rem; }
+.info-grid dt { color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
+.info-grid dd { margin: 0; font-weight: 500; }
+.info-grid .wide { grid-column: 1 / -1; }
+.unit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: .6rem; }
+.unit { display: block; border-radius: 10px; padding: .6rem .75rem; text-decoration: none; border: 1px solid transparent; line-height: 1.25; }
+.unit .unit-id { display: block; font-weight: 700; font-size: 1rem; }
+.unit .unit-st { display: block; font-size: .72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.unit-livre { background: #e3f6ec; color: #15803d; border-color: #bfe8d0; }
+.unit-alugada { background: #fff4d6; color: #8a5a00; border-color: #f1dc9c; }
+.unit:hover { filter: brightness(.97); transform: translateY(-1px); }
+@media (max-width: 991.98px) { .bottom-bar a { font-size: .62rem; } }
