@@ -2,6 +2,14 @@
 {% block title %}{{ res.plural }}{% endblock %}
 {% block heading %}{{ res.plural }}{% endblock %}
 {% block actions %}
+  {% for f in filtros %}
+  <form method="get" class="d-flex gap-2">
+    <select name="{{ f.nome }}" class="form-select" aria-label="{{ f.rotulo }}" onchange="this.form.submit()">
+      <option value="">{{ f.rotulo }}: todos</option>
+      {% for val, txt in f.opcoes %}<option value="{{ val }}" {% if f.atual == val %}selected{% endif %}>{{ txt }}</option>{% endfor %}
+    </select>
+  </form>
+  {% endfor %}
   {% if mes %}
   <form method="get" class="d-flex gap-2">
     <input type="month" name="mes" value="{{ mes }}" class="form-control" aria-label="Mês">
@@ -25,12 +33,17 @@
         <tr>{% for t in titulos %}<th>{{ t }}</th>{% endfor %}<th class="text-end">Ações</th></tr>
       </thead>
       <tbody>
-        {% for id, cells in linhas %}
+        {% for id, cells, obj in linhas %}
         <tr data-row>
           {% for c in cells %}
           <td>{% if c.cor is defined %}<span class="badge badge-soft-{{ c.cor }}">{{ c.texto }}</span>{% else %}{{ c }}{% endif %}</td>
           {% endfor %}
           <td class="text-end text-nowrap">
+            {% if res.slug == 'contratos' and obj.ativo %}
+            <button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#modalBaixa"
+                    data-action="{{ url_for('crud.baixar_contrato', id=id) }}" data-nome="{{ obj }}"
+                    title="Dar baixa (devolução do imóvel)"><i class="bi bi-box-arrow-in-left me-1"></i>Dar baixa</button>
+            {% endif %}
             <a class="btn btn-sm btn-outline-primary btn-icon" title="Editar"
                href="{{ url_for('crud.editar', slug=res.slug, id=id) }}"><i class="bi bi-pencil"></i></a>
             <form method="post" action="{{ url_for('crud.excluir', slug=res.slug, id=id) }}" class="d-inline"
@@ -49,4 +62,26 @@
   {% endif %}
   <div class="empty" id="sem-resultado" style="display:none"><i class="bi bi-search"></i>Nada encontrado para a busca.</div>
 </div>
+
+{% if res.slug == 'contratos' %}
+<div class="modal fade" id="modalBaixa" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <form method="post" class="modal-content" id="formBaixa">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <div class="modal-header"><h5 class="modal-title">Dar baixa no aluguel</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button></div>
+      <div class="modal-body">
+        <p class="mb-3" id="baixaNome"></p>
+        <label class="form-label" for="data_devolucao">Data da devolução</label>
+        <input class="form-control" type="date" id="data_devolucao" name="data_devolucao" value="{{ hoje }}" required>
+        <div class="form-text">O imóvel ficará disponível para nova locação.</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button class="btn btn-warning">Confirmar baixa</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
 {% endblock %}

@@ -10,7 +10,7 @@
     <form method="post">
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
       <div class="row g-3">
-        {% for f in res.fields %}
+        {% for f in res.fields + res.extra_fields %}
         {% set v = valores.get(f.name, '') %}
         <div class="col-12 {{ '' if f.wide or f.kind == 'bool' else 'col-md-6' }}">
           {% if f.kind == 'bool' %}
@@ -21,13 +21,17 @@
           </div>
           {% else %}
           <label class="form-label" for="{{ f.name }}">{{ f.label }}{% if not f.required %} <small class="text-muted fw-normal">(opcional)</small>{% endif %}</label>
-          {% if f.kind == 'select' %}
+          {% if f.kind in ('select', 'choice') %}
           <select class="form-select" id="{{ f.name }}" name="{{ f.name }}" {% if f.required %}required{% endif %}>
             <option value="">— selecione —</option>
-            {% for val, label in f.choices() %}
+            {% for val, label in f.opcoes(obj) %}
             <option value="{{ val }}" {% if v|string == val|string %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
           </select>
+          {% elif f.kind == 'lista' %}
+          <textarea class="form-control" rows="3" id="{{ f.name }}" name="{{ f.name }}"
+                    placeholder="Ex.: 101, 102, 103 ou 101-110 (separe por vírgula ou linha)">{{ v }}</textarea>
+          <div class="form-text">Informe as identificações; as que já existem no prédio são ignoradas.</div>
           {% elif f.kind == 'money' %}
           <div class="input-group">
             <span class="input-group-text">R$</span>
@@ -55,4 +59,23 @@
     </form>
   </div>
 </div>
+{% if res.slug == 'predios' and obj.id %}
+<div class="card mt-4" style="max-width: 880px;">
+  <div class="card-header"><i class="bi bi-buildings me-1"></i>Unidades deste prédio ({{ obj.imoveis|length }})</div>
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead><tr><th>Tipo</th><th>Identificação</th><th>Situação</th><th>Inquilino atual</th></tr></thead>
+      <tbody>
+        {% for i in obj.imoveis %}
+        <tr><td>{{ i.tipo_nome }}</td><td><a href="{{ url_for('crud.editar', slug='imoveis', id=i.id) }}">{{ i.identificacao }}</a></td>
+            <td>{% if i.disponivel %}<span class="badge badge-soft-success">Disponível</span>{% else %}<span class="badge badge-soft-warning">Alugado</span>{% endif %}</td>
+            <td>{{ i.contrato_ativo.inquilino.nome if i.contrato_ativo else '' }}</td></tr>
+        {% else %}
+        <tr><td colspan="4"><div class="empty py-3">Nenhuma unidade cadastrada.</div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
 {% endblock %}

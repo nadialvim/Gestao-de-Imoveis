@@ -39,8 +39,8 @@ def dados_mes(ano, mes):
         .group_by(Pagamento.contrato_id).all()
     )
     vigentes = (Contrato.query
-                .filter(Contrato.ativo.is_(True),
-                        Contrato.data_inicio <= fim, Contrato.data_fim >= inicio)
+                .filter(Contrato.data_inicio <= fim,
+                        func.coalesce(Contrato.encerrado_em, Contrato.data_fim) >= inicio)
                 .all())
     hoje = date.today()
     pendentes = []

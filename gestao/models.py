@@ -6,22 +6,50 @@ class Predio(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(120), nullable=False)
     endereco = db.Column(db.String(255))
+    imoveis = db.relationship("Imovel", back_populates="predio",
+                              order_by="Imovel.tipo, Imovel.identificacao")
 
     def __str__(self):
         return self.nome
 
 
-class Apartamento(db.Model):
-    __tablename__ = "apartamentos"
+class Imovel(db.Model):
+    """Apartamento e loja (vinculados a um prédio) ou casa (independente)."""
+    __tablename__ = "imoveis"
+    __table_args__ = (
+        db.CheckConstraint("tipo in ('apartamento','casa','loja')", name="imoveis_tipo_chk"),
+        db.CheckConstraint(
+            "(tipo = 'casa' and predio_id is null) or (tipo <> 'casa' and predio_id is not null)",
+            name="imoveis_predio_chk"),
+    )
+    TIPOS = [("apartamento", "Apartamento"), ("casa", "Casa"), ("loja", "Loja")]
     id = db.Column(db.Integer, primary_key=True)
-    predio_id = db.Column(db.Integer, db.ForeignKey("predios.id"), nullable=False)
-    numero = db.Column(db.String(30), nullable=False)
+    tipo = db.Column(db.String(20), nullable=False, default="apartamento")
+    predio_id = db.Column(db.Integer, db.ForeignKey("predios.id"))
+    identificacao = db.Column(db.String(60), nullable=False)
     descricao = db.Column(db.String(255))
     valor_aluguel_padrao = db.Column(db.Numeric(12, 2))
-    predio = db.relationship("Predio")
+    predio = db.relationship("Predio", back_populates="imoveis")
+    contratos = db.relationship("Contrato", viewonly=True)
+
+    @property
+    def tipo_nome(self):
+        return dict(self.TIPOS).get(self.tipo, self.tipo)
+
+    @property
+    def contrato_ativo(self):
+        return next((c for c in self.contratos if c.ativo), None)
+
+    @property
+    def disponivel(self):
+        return self.contrato_ativo is None
 
     def __str__(self):
-        return f"{self.predio.nome} - Apto {self.numero}"
+        if self.tipo == "casa":
+            return f"Casa {self.identificacao}"
+        rotulo = "Apto" if self.tipo == "apartamento" else "Loja"
+        prefixo = f"{self.predio.nome} - " if self.predio else ""
+        return f"{prefixo}{rotulo} {self.identificacao}"
 
 
 class Vaga(db.Model):
@@ -31,6 +59,15 @@ class Vaga(db.Model):
     identificacao = db.Column(db.String(60), nullable=False)
     valor_aluguel_padrao = db.Column(db.Numeric(12, 2))
     predio = db.relationship("Predio")
+    contratos = db.relationship("Contrato", viewonly=True)
+
+    @property
+    def contrato_ativo(self):
+        return next((c for c in self.contratos if c.ativo), None)
+
+    @property
+    def disponivel(self):
+        return self.contrato_ativo is None
 
     def __str__(self):
         base = f"Vaga {self.identificacao}"
@@ -53,20 +90,22 @@ class Contrato(db.Model):
     __tablename__ = "contratos"
     id = db.Column(db.Integer, primary_key=True)
     inquilino_id = db.Column(db.Integer, db.ForeignKey("inquilinos.id"), nullable=False)
-    apartamento_id = db.Column(db.Integer, db.ForeignKey("apartamentos.id"))
+    imovel_id = db.Column(db.Integer, db.ForeignKey("imoveis.id"))
     vaga_id = db.Column(db.Integer, db.ForeignKey("vagas.id"))
     data_inicio = db.Column(db.Date, nullable=False)
     data_fim = db.Column(db.Date, nullable=False)
     valor_mensal = db.Column(db.Numeric(12, 2), nullable=False)
     dia_vencimento = db.Column(db.Integer, nullable=False, default=5)
     ativo = db.Column(db.Boolean, nullable=False, default=True)
+    encerrado_em = db.Column(db.Date)  # data da devolução (baixa); ativo=False
     inquilino = db.relationship("Inquilino")
-    apartamento = db.relationship("Apartamento")
-    vaga = db.relationship("Vaga")
+    imovel_rel = db.relationship("Imovel", overlaps="contratos")
+    vaga = db.relationship("Vaga", overlaps="contratos")
 
     @property
     def imovel(self):
-        return self.apartamento or self.vaga
+        """Imóvel ou vaga alugado neste contrato."""
+        return self.imovel_rel or self.vaga
 
     def __str__(self):
         return f"{self.inquilino} — {self.imovel}"

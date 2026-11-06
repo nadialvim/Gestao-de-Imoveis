@@ -1,8 +1,11 @@
+from datetime import date
+
 from flask import (Blueprint, abort, flash, redirect, render_template, request,
                    url_for)
 from sqlalchemy.exc import IntegrityError
 
 from .extensions import db
+from .models import Contrato
 from .services.periodo import intervalo_mes, parse_mes
 
 bp = Blueprint("crud", __name__, url_prefix="/c")
@@ -28,18 +31,26 @@ def listar(slug):
         col = getattr(res.model, res.month_field)
         query = query.filter(col >= inicio, col <= fim)
         mes = f"{ano:04d}-{m:02d}"
+    filtros = []
+    for coluna, rotulo, opcoes in res.filters:
+        atual = request.args.get(coluna, "")
+        if atual in {str(v) for v, _ in opcoes}:
+            query = query.filter(getattr(res.model, coluna) == atual)
+        else:
+            atual = ""
+        filtros.append({"nome": coluna, "rotulo": rotulo, "opcoes": opcoes, "atual": atual})
     if res.order:
         query = query.order_by(*res.order())
     objetos = query.all()
-    linhas = [(o.id, [fn(o) for _, fn in res.columns]) for o in objetos]
+    linhas = [(o.id, [fn(o) for _, fn in res.columns], o) for o in objetos]
     return render_template(
-        "list.html", res=res, linhas=linhas, mes=mes,
-        titulos=[t for t, _ in res.columns],
+        "list.html", res=res, linhas=linhas, mes=mes, filtros=filtros,
+        titulos=[t for t, _ in res.columns], hoje=date.today().isoformat(),
     )
 
 
 def _valores_iniciais(res, obj):
-    if obj is not None:
+    if obj is not None and obj.id is not None:
         return {f.name: f.to_input(getattr(obj, f.name)) for f in res.fields}
     base = res.new_defaults() if res.new_defaults else {}
     return {f.name: f.to_input(base.get(f.name, f.default)) for f in res.fields}
@@ -47,7 +58,7 @@ def _valores_iniciais(res, obj):
 
 def _salvar(res, obj):
     dados, erros = {}, []
-    for f in res.fields:
+    for f in list(res.fields) + list(res.extra_fields):
         try:
             dados[f.name] = f.parse(request.form.get(f.name))
         except ValueError as exc:
@@ -58,12 +69,21 @@ def _salvar(res, obj):
         for e in erros:
             flash(e, "danger")
         return False
-    for k, v in dados.items():
-        setattr(obj, k, v)
+    for f in res.fields:
+        setattr(obj, f.name, dados[f.name])
     if obj.id is None:
         db.session.add(obj)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        flash("Não foi possível salvar: registro duplicado ou inválido.", "danger")
+        return False
     flash(f"{res.singular} salvo(a) com sucesso.", "success")
+    if res.after_save:
+        mensagem = res.after_save(obj, dados)
+        if mensagem:
+            flash(mensagem, "info")
     return True
 
 
@@ -104,3 +124,25 @@ def excluir(slug, id):
         db.session.rollback()
         flash("Não é possível excluir: há registros vinculados.", "danger")
     return redirect(url_for("crud.listar", slug=slug))
+
+
+@bp.route("/contratos/<int:id>/baixa", methods=["POST"])
+def baixar_contrato(id):
+    """Dá baixa no aluguel (devolução do imóvel/vaga), liberando-o para nova locação."""
+    contrato = db.get_or_404(Contrato, id)
+    if not contrato.ativo:
+        flash("Este contrato já foi encerrado.", "warning")
+        return redirect(url_for("crud.listar", slug="contratos"))
+    try:
+        data = date.fromisoformat(request.form.get("data_devolucao", ""))
+    except ValueError:
+        flash("Informe a data de devolução.", "danger")
+        return redirect(url_for("crud.listar", slug="contratos"))
+    if data < contrato.data_inicio:
+        flash("A devolução não pode ser anterior ao início do contrato.", "danger")
+        return redirect(url_for("crud.listar", slug="contratos"))
+    contrato.ativo = False
+    contrato.encerrado_em = data
+    db.session.commit()
+    flash(f"Baixa registrada: {contrato.imovel} está disponível para locação.", "success")
+    return redirect(url_for("crud.listar", slug="contratos"))

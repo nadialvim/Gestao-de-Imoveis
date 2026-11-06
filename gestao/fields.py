@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+import inspect
+from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Callable, Optional
@@ -18,15 +19,28 @@ class Badge:
 class Field:
     name: str
     label: str
-    kind: str = "text"  # text, textarea, money, int, date, month, select, bool
+    # text, money, int, date, month, bool, select (id inteiro), choice (texto), lista
+    kind: str = "text"
     required: bool = True
-    choices: Optional[Callable] = None  # select: () -> [(id, label)]
+    choices: Optional[Callable] = None  # select/choice: ([obj]) -> [(valor, rótulo)]
     default: Optional[object] = None
     wide: bool = False  # ocupa a linha inteira no formulário de 2 colunas
+
+    def opcoes(self, obj=None):
+        """Opções do select; a função de opções pode receber o objeto em edição."""
+        if not self.choices:
+            return []
+        if inspect.signature(self.choices).parameters:
+            return self.choices(obj)
+        return self.choices()
 
     def parse(self, raw):
         if self.kind == "bool":
             return raw is not None
+        if self.kind == "lista":
+            from .services.unidades import parse_lista
+
+            return parse_lista(raw)
         raw = (raw or "").strip()
         if not raw:
             if self.required:
@@ -41,6 +55,10 @@ class Field:
                 return value
             if self.kind in ("int", "select"):
                 return int(raw)
+            if self.kind == "choice":
+                if raw not in {str(v) for v, _ in self.opcoes()}:
+                    raise ValueError("opção inválida")
+                return raw
             if self.kind == "date":
                 return date.fromisoformat(raw)
             if self.kind == "month":
@@ -49,7 +67,9 @@ class Field:
         except InvalidOperation:
             raise ValueError("valor inválido")
         except (TypeError, ValueError) as exc:
-            raise ValueError(str(exc) if "negativo" in str(exc) else "valor inválido")
+            msg = str(exc)
+            raise ValueError(msg if msg in ("não pode ser negativo", "opção inválida")
+                             else "valor inválido")
         return raw
 
     def to_input(self, value):
@@ -77,3 +97,8 @@ class Resource:
     month_field: Optional[str] = None  # habilita filtro ?mes=YYYY-MM
     validate: Optional[Callable] = None  # (data, obj) -> [erros]
     new_defaults: Optional[Callable] = None  # () -> dict de valores iniciais
+    # campos de formulário que não são colunas do modelo (ex.: lista de apartamentos)
+    extra_fields: list = field(default_factory=list)
+    after_save: Optional[Callable] = None  # (obj, dados) -> mensagem opcional
+    # filtros da listagem: [(coluna, rótulo, [(valor, texto)])] via ?coluna=valor
+    filters: list = field(default_factory=list)

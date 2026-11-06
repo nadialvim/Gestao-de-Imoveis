@@ -5,6 +5,16 @@
     el.addEventListener("click", function () { body.classList.toggle("menu-open"); });
   });
 
+  // Modal de baixa de contrato
+  var modalBaixa = document.getElementById("modalBaixa");
+  if (modalBaixa) {
+    modalBaixa.addEventListener("show.bs.modal", function (ev) {
+      var b = ev.relatedTarget;
+      document.getElementById("formBaixa").setAttribute("action", b.getAttribute("data-action"));
+      document.getElementById("baixaNome").textContent = b.getAttribute("data-nome");
+    });
+  }
+
   // Busca nas tabelas
   var input = document.getElementById("busca");
   if (input) {

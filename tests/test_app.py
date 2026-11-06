@@ -5,7 +5,7 @@ import pytest
 
 from gestao import create_app
 from gestao.extensions import db
-from gestao.models import Apartamento, Contrato, Despesa, Inquilino, Pagamento, Predio, Vaga
+from gestao.models import Contrato, Despesa, Imovel, Inquilino, Pagamento, Predio, Vaga
 from gestao.services import relatorio
 
 
@@ -27,7 +27,7 @@ def client(app):
 @pytest.fixture
 def base(app):
     p = Predio(nome="Ed. Sol")
-    a = Apartamento(predio=p, numero="101")
+    a = Imovel(tipo="apartamento", predio=p, identificacao="101")
     v = Vaga(predio=p, identificacao="G1")
     i = Inquilino(nome="Maria")
     db.session.add_all([p, a, v, i])
@@ -36,7 +36,7 @@ def base(app):
 
 
 def novo_contrato(i, a=None, v=None, inicio=date(2026, 1, 1), fim=date(2026, 12, 31)):
-    c = Contrato(inquilino=i, apartamento=a, vaga=v, data_inicio=inicio, data_fim=fim,
+    c = Contrato(inquilino=i, imovel_rel=a, vaga=v, data_inicio=inicio, data_fim=fim,
                  valor_mensal=Decimal("1000"), dia_vencimento=5, ativo=True)
     db.session.add(c)
     db.session.commit()
@@ -76,18 +76,18 @@ def test_contrato_sobreposto_rejeitado(client, base):
     _, a, _, i = base
     novo_contrato(i, a=a)
     r = client.post("/c/contratos/novo", data={
-        "inquilino_id": i.id, "apartamento_id": a.id, "data_inicio": "2026-06-01",
+        "inquilino_id": i.id, "imovel_id": a.id, "data_inicio": "2026-06-01",
         "data_fim": "2027-06-01", "valor_mensal": "900", "dia_vencimento": "5",
         "ativo": "on"})
     assert r.status_code == 200  # volta ao formulário com erro
-    assert "Já existe contrato ativo".encode() in r.data
+    assert "Já está alugado".encode() in r.data
     assert Contrato.query.count() == 1
 
 
 def test_contrato_exige_um_imovel(client, base):
     _, a, v, i = base
     r = client.post("/c/contratos/novo", data={
-        "inquilino_id": i.id, "apartamento_id": a.id, "vaga_id": v.id,
+        "inquilino_id": i.id, "imovel_id": a.id, "vaga_id": v.id,
         "data_inicio": "2026-01-01", "data_fim": "2026-12-31",
         "valor_mensal": "900", "dia_vencimento": "5"})
     assert "apenas um".encode() in r.data
@@ -209,3 +209,115 @@ def test_layout_menu_lateral_e_busca(client, base):
     assert 'id="busca"' in html and "Ed. Sol" in html
     assert client.get("/static/app.css").status_code == 200
     assert client.get("/static/app.js").status_code == 200
+
+
+# ---------- imóveis, disponibilidade e baixa ----------
+def test_parse_lista():
+    from gestao.services.unidades import parse_lista
+
+    assert parse_lista("101, 102\n103;102") == ["101", "102", "103"]
+    assert parse_lista("101-104") == ["101", "102", "103", "104"]
+    assert parse_lista("G2-05, 7") == ["G2-05", "7"]
+    assert parse_lista("") == []
+    with pytest.raises(ValueError):
+        parse_lista("110-101")
+    with pytest.raises(ValueError):
+        parse_lista("1-9999")
+
+
+def test_casa_sem_predio_e_apto_exige_predio(client, base):
+    p, *_ = base
+    r = client.post("/c/imoveis/novo", data={"tipo": "casa", "predio_id": p.id,
+                                             "identificacao": "Rua Sol, 10"})
+    assert r.status_code == 302
+    casa = Imovel.query.filter_by(tipo="casa").one()
+    assert casa.predio_id is None and str(casa) == "Casa Rua Sol, 10"
+    r = client.post("/c/imoveis/novo", data={"tipo": "apartamento", "identificacao": "900"})
+    assert "vinculados a um prédio".encode() in r.data
+    r = client.post("/c/imoveis/novo", data={"tipo": "loja", "predio_id": p.id,
+                                             "identificacao": "L1"})
+    assert r.status_code == 302
+    r = client.post("/c/imoveis/novo", data={"tipo": "loja", "predio_id": p.id,
+                                             "identificacao": "L1"})
+    assert "Já existe".encode() in r.data
+
+
+def test_predio_cadastra_unidades_em_lote(client):
+    r = client.post("/c/predios/novo", data={
+        "nome": "Ed. Lua", "apartamentos_novos": "101-103, 201", "lojas_novas": "A, B"})
+    assert r.status_code == 302
+    predio = Predio.query.filter_by(nome="Ed. Lua").one()
+    assert sorted(i.identificacao for i in predio.imoveis if i.tipo == "apartamento") == \
+        ["101", "102", "103", "201"]
+    assert sorted(i.identificacao for i in predio.imoveis if i.tipo == "loja") == ["A", "B"]
+    # edição adiciona novos sem duplicar
+    client.post(f"/c/predios/{predio.id}/editar", data={
+        "nome": "Ed. Lua", "apartamentos_novos": "103, 202", "lojas_novas": ""})
+    assert Imovel.query.filter_by(predio_id=predio.id, tipo="apartamento").count() == 5
+    assert "Unidades deste prédio".encode() in client.get(
+        f"/c/predios/{predio.id}/editar").data
+
+
+def _contrato_form(i, **extra):
+    d = {"inquilino_id": i.id, "data_inicio": "2026-01-01", "data_fim": "2026-12-31",
+         "valor_mensal": "1000", "dia_vencimento": "5"}
+    d.update(extra)
+    return d
+
+
+def test_alugado_nao_pode_alugar_ate_dar_baixa(client, base):
+    _, a, _, i = base
+    outro = Inquilino(nome="Joao")
+    db.session.add(outro)
+    db.session.commit()
+    assert a.disponivel
+    assert client.post("/c/contratos/novo", data=_contrato_form(i, imovel_id=a.id)).status_code == 302
+    db.session.refresh(a)
+    assert not a.disponivel
+    # alugado não aparece nas opções e é recusado se forçado
+    assert "Apto 101" not in client.get("/c/contratos/novo").get_data(as_text=True)
+    r = client.post("/c/contratos/novo", data=_contrato_form(outro, imovel_id=a.id))
+    assert "Já está alugado".encode() in r.data
+    assert Contrato.query.count() == 1
+    # dar baixa libera o imóvel
+    c = Contrato.query.one()
+    r = client.post(f"/c/contratos/{c.id}/baixa", data={"data_devolucao": "2026-05-20"})
+    assert r.status_code == 302
+    db.session.refresh(c)
+    assert c.ativo is False and c.encerrado_em == date(2026, 5, 20)
+    db.session.refresh(a)
+    assert a.disponivel
+    assert "Apto 101" in client.get("/c/contratos/novo").get_data(as_text=True)
+    r = client.post("/c/contratos/novo", data=_contrato_form(outro, imovel_id=a.id))
+    assert r.status_code == 302
+    assert Contrato.query.filter_by(ativo=True).count() == 1
+
+
+def test_baixa_valida_data_e_vaga(client, base):
+    _, _, v, i = base
+    client.post("/c/contratos/novo", data=_contrato_form(i, vaga_id=v.id))
+    c = Contrato.query.one()
+    client.post(f"/c/contratos/{c.id}/baixa", data={"data_devolucao": "2025-01-01"})
+    db.session.refresh(c)
+    assert c.ativo is True  # data anterior ao início é recusada
+    assert not db.session.get(Vaga, v.id).disponivel
+    client.post(f"/c/contratos/{c.id}/baixa", data={"data_devolucao": "2026-03-01"})
+    db.session.refresh(c)
+    assert c.ativo is False and db.session.get(Vaga, v.id).disponivel
+
+
+def test_pendencia_considera_baixa(base):
+    _, a, _, i = base
+    c = novo_contrato(i, a=a)
+    c.ativo, c.encerrado_em = False, date(2026, 3, 10)
+    db.session.commit()
+    assert len(relatorio.dados_mes(2026, 3)["pendentes"]) == 1   # mês da baixa ainda cobra
+    assert relatorio.dados_mes(2026, 4)["pendentes"] == []       # depois da baixa, não
+
+
+def test_filtro_por_tipo_na_lista(client, base):
+    p, *_ = base
+    db.session.add(Imovel(tipo="casa", identificacao="Casa Azul"))
+    db.session.commit()
+    html = client.get("/c/imoveis/?tipo=casa").get_data(as_text=True)
+    assert "Casa Azul" in html and "Apto" not in html.split("<tbody>")[1]
