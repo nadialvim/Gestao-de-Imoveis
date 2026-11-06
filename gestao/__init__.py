@@ -56,6 +56,13 @@ def create_app(config=None):
         raise RuntimeError("Defina DATABASE_URL (string do Transaction pooler do Supabase, "
                            "porta 6543) nas variáveis de ambiente da Vercel.")
 
+    host = urlsplit(app.config["SQLALCHEMY_DATABASE_URI"]).hostname or ""
+    if os.environ.get("VERCEL") and host.startswith("db.") and host.endswith(".supabase.co"):
+        raise RuntimeError(
+            "DATABASE_URL usa a conexão direta do Supabase (IPv6), que não funciona na "
+            "Vercel. Use a string do Transaction pooler (aws-0-...pooler.supabase.com:6543, "
+            "usuário postgres.<ref>).")
+
     # Serverless: sem pool persistente de conexões (usa o pooler do Supabase).
     if app.config["SQLALCHEMY_DATABASE_URI"].startswith("postgresql"):
         app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"poolclass": NullPool}

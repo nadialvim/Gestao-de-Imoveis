@@ -177,3 +177,10 @@ def test_vercel_exige_database_url(monkeypatch):
     monkeypatch.delenv("POSTGRES_URL", raising=False)
     with pytest.raises(RuntimeError, match="DATABASE_URL"):
         create_app({"SECRET_KEY": "abc"})
+
+
+def test_vercel_rejeita_conexao_direta_supabase(monkeypatch):
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://postgres:x@db.abc.supabase.co:6543/postgres")
+    with pytest.raises(RuntimeError, match="Transaction pooler"):
+        create_app({"SECRET_KEY": "abc"})
