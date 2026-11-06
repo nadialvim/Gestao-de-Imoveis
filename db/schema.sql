@@ -69,6 +69,7 @@ create table if not exists despesas (
     descricao varchar(255) not null,
     categoria varchar(80),
     valor numeric(12,2) not null,
+    pago_por varchar(40),
     predio_id integer references predios(id)
 );
 

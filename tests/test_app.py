@@ -522,3 +522,92 @@ def test_debitos_contrato_encerrado_e_quitado(base):
     c.ativo, c.encerrado_em = False, date(2026, 2, 28)
     db.session.commit()
     assert relatorio.debitos(hoje=date(2026, 9, 1))["inquilinos"] == []
+
+
+# ---------------------------------------------------------------- fechamento por pessoa
+def _pag(c, valor, quem, forma="Pix", dia=5, comp=date(2026, 3, 1)):
+    return Pagamento(contrato=c, competencia=comp, data_pagamento=date(2026, 3, dia),
+                     valor_pago=Decimal(valor), forma_pagamento=forma, recebido_por=quem)
+
+
+def _fechamento_base(base):
+    _, a, v, i = base
+    c1 = novo_contrato(i, a)
+    c2 = novo_contrato(i, v, valor="250")
+    db.session.add_all([
+        _pag(c1, "600", "Sergio", "Pix"),
+        _pag(c1, "400", "Fagner", "Dinheiro", dia=20),
+        _pag(c2, "250", "Sergio", "Dinheiro"),
+        _pag(c2, "50", None, "Cheque", dia=21, comp=date(2026, 4, 1)),          # sem recebedor, forma antiga
+        Despesa(data=date(2026, 3, 8), descricao="Reparo", valor=Decimal("100"), pago_por="Sergio"),
+        Despesa(data=date(2026, 3, 9), descricao="Limpeza", valor=Decimal("30"), pago_por="Fagner"),
+        Despesa(data=date(2026, 3, 10), descricao="Antiga", valor=Decimal("20")),  # sem pagador
+        Pagamento(contrato=c1, competencia=date(2026, 4, 1), data_pagamento=date(2026, 4, 5),
+                  valor_pago=Decimal("999"), forma_pagamento="Pix", recebido_por="Sergio"),  # outro mês
+    ])
+    db.session.commit()
+
+
+def test_fechamento_por_pessoa(base):
+    _fechamento_base(base)
+    f = relatorio.fechamento(2026, 3)
+    por_nome = {p["nome"]: p for p in f["pessoas"]}
+    assert list(por_nome) == ["Sergio", "Fagner", "Não informado"]
+    s, g, n = por_nome["Sergio"], por_nome["Fagner"], por_nome["Não informado"]
+    assert s["recebido"] == Decimal("850") and s["qtd"] == 2
+    assert s["por_forma"]["Pix"] == Decimal("600") and s["por_forma"]["Dinheiro"] == Decimal("250")
+    assert s["gasto"] == Decimal("100") and s["saldo"] == Decimal("750")
+    assert g["recebido"] == Decimal("400") and g["gasto"] == Decimal("30") and g["saldo"] == Decimal("370")
+    assert g["por_forma"]["Dinheiro"] == Decimal("400")
+    assert n["recebido"] == Decimal("50") and n["gasto"] == Decimal("20")
+    assert n["por_forma"]["Outras / não informada"] == Decimal("50")
+    # a soma por pessoa bate com o relatório mensal
+    mensal = relatorio.dados_mes(2026, 3)
+    assert sum(p["recebido"] for p in f["pessoas"]) == mensal["total_recebido"] == f["total_recebido"]
+    assert sum(p["gasto"] for p in f["pessoas"]) == mensal["total_despesas"] == f["total_despesas"]
+    assert sum(p["saldo"] for p in f["pessoas"]) == mensal["saldo"] == f["saldo"]
+    assert sum(f["totais_forma"].values()) == f["total_recebido"]
+
+
+def test_fechamento_sem_dados_nao_mostra_nao_informado(base):
+    f = relatorio.fechamento(2026, 8)
+    assert [p["nome"] for p in f["pessoas"]] == ["Sergio", "Fagner"]
+    assert f["total_recebido"] == 0 and all(p["saldo"] == 0 for p in f["pessoas"])
+
+
+def test_tela_e_exportacoes_do_fechamento(client, base):
+    _fechamento_base(base)
+    html = client.get("/relatorios/fechamento?mes=2026-03").get_data(as_text=True)
+    for txt in ("Fechamento de março/2026", "Sergio", "Fagner", "Não informado", "R$ 850,00",
+                "R$ 750,00", "Resumo por forma de pagamento", "Fechamento por pessoa"):
+        assert txt in html
+    pdf = client.get("/relatorios/fechamento.pdf?mes=2026-03")
+    assert pdf.mimetype == "application/pdf" and pdf.data.startswith(b"%PDF")
+    xlsx = client.get("/relatorios/fechamento.xlsx?mes=2026-03")
+    assert xlsx.status_code == 200 and xlsx.data[:2] == b"PK"
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    wb = load_workbook(BytesIO(xlsx.data))
+    assert wb.sheetnames == ["Resumo", "Sergio", "Fagner", "Não informado"]
+    assert client.get("/relatorios/fechamento.csv").status_code == 404
+
+
+def test_despesa_exige_pago_por_e_filtros_por_pessoa(client, base):
+    dados = {"data": "2026-03-08", "descricao": "Reparo", "valor": "100"}
+    r = client.post("/c/despesas/novo", data=dados)
+    assert "Pago por: campo obrigatório" in r.get_data(as_text=True)
+    assert client.post("/c/despesas/novo", data={**dados, "pago_por": "Outro"}).status_code == 200
+    assert client.post("/c/despesas/novo", data={**dados, "pago_por": "Fagner"}).status_code == 302
+    client.post("/c/despesas/novo", data={**dados, "descricao": "Luz", "pago_por": "Sergio"})
+    html = client.get("/c/despesas/?mes=2026-03&pago_por=Fagner").get_data(as_text=True)
+    corpo = html.split("<tbody>")[1]
+    assert "Reparo" in corpo and "Luz" not in corpo
+    # filtro de pagamentos por quem recebeu
+    _, a, _, i = base
+    c = novo_contrato(i, a)
+    db.session.add_all([_pag(c, "600", "Sergio"), _pag(c, "400", "Fagner", dia=20)])
+    db.session.commit()
+    corpo = client.get("/c/pagamentos/?mes=2026-03&recebido_por=Sergio").get_data(as_text=True).split("<tbody>")[1]
+    assert "R$ 600,00" in corpo and "Sergio" in corpo and "Fagner" not in corpo

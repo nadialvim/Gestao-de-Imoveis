@@ -26,7 +26,7 @@ pytest                                              # testes (SQLite em memória
 ## Atualizar um banco que já existia
 Rode, **na ordem e uma vez cada**, no SQL Editor do Supabase, apenas as migrações que ainda não rodou
 (faça backup antes da 004):
-`db/migrations/002_imoveis.sql` → `003_recebido_por.sql` → `004_unifica_vagas.sql`.
+`db/migrations/002_imoveis.sql` → `003_recebido_por.sql` → `004_unifica_vagas.sql` → `005_despesa_pago_por.sql`.
 Bancos novos usam só `db/schema.sql`.
 
 ## Como usar
@@ -44,6 +44,7 @@ O menu tem 6 itens: **Início, Imóveis, Inquilinos, Pagamentos, Despesas, Relat
 - **Pagamentos**: pelo botão *Registrar pagamento* da ficha (ou menu Pagamentos), o valor vem preenchido com o
   que falta no mês (editável); informe a forma (Pix, Dinheiro, Transferência) e quem recebeu (Sergio/Fagner).
   A coluna **Faltante** mostra o que falta em pagamentos parciais (complementos do mesmo mês são abatidos).
-- **Relatórios** (abas *Mensal* e *Inquilinos em débito*): o mensal lista os valores recebidos no mês (pela data
+- **Fechamento por pessoa** (Relatórios): para o mês escolhido mostra, para Sergio e Fagner, o total recebido (por Pix, Dinheiro e Transferência), a lista dos pagamentos, as despesas que cada um pagou (campo *Pago por* na despesa) e o saldo (recebido − despesas), com PDF e Excel.
+- **Relatórios** (abas *Mensal*, *Fechamento por pessoa* e *Inquilinos em débito*): o mensal lista os valores recebidos no mês (pela data
   do pagamento), as despesas e o saldo a repassar, com exportação em PDF/Excel; o de débito mostra, por
   inquilino, os meses vencidos e não pagos desde o início do aluguel.

@@ -6,6 +6,7 @@ from .extensions import db
 
 FORMAS_PAGAMENTO = ["Pix", "Dinheiro", "Transferência bancária (TED/DOC)"]
 RECEBEDORES = ["Sergio", "Fagner"]
+NAO_INFORMADO = "Não informado"
 
 
 class Predio(db.Model):
@@ -131,5 +132,6 @@ class Despesa(db.Model):
     descricao = db.Column(db.String(255), nullable=False)
     categoria = db.Column(db.String(80))
     valor = db.Column(db.Numeric(12, 2), nullable=False)
+    pago_por = db.Column(db.String(40))  # quem pagou (Sergio/Fagner) — fechamento por pessoa
     predio_id = db.Column(db.Integer, db.ForeignKey("predios.id"))
     predio = db.relationship("Predio")

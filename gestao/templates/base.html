@@ -18,7 +18,7 @@
 {% set ep = request.endpoint %}
 {% set sec_imoveis = slug in ('imoveis', 'predios') or ep in ('fichas.predio', 'fichas.imovel') %}
 {% set sec_inquilinos = slug in ('inquilinos', 'alugueis') or ep == 'fichas.inquilino' %}
-{% set sec_relatorios = ep in ('main.relatorios', 'main.debitos') %}
+{% set sec_relatorios = ep in ('main.relatorios', 'main.debitos', 'main.fechamento') %}
 {% macro item(href, icone, texto, ativo) -%}
   <a class="nav-link {{ 'active' if ativo }}" href="{{ href }}"><i class="bi bi-{{ icone }}"></i><span>{{ texto }}</span></a>
 {%- endmacro %}
@@ -61,6 +61,7 @@
                      ('Prédios', url_for('crud.listar', slug='predios'), slug == 'predios' or ep == 'fichas.predio')] %}
     {% else %}
       {% set abas = [('Mensal', url_for('main.relatorios'), ep == 'main.relatorios'),
+                     ('Fechamento por pessoa', url_for('main.fechamento'), ep == 'main.fechamento'),
                      ('Inquilinos em débito', url_for('main.debitos'), ep == 'main.debitos')] %}
     {% endif %}
     <ul class="nav nav-tabs-soft mb-3">

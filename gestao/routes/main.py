@@ -25,6 +25,29 @@ def relatorios():
                            mes=f"{ano:04d}-{mes:02d}")
 
 
+@bp.route("/relatorios/fechamento")
+def fechamento():
+    ano, mes = parse_mes(request.args.get("mes"))
+    return render_template("relatorio_fechamento.html", f=relatorio.fechamento(ano, mes),
+                           mes=f"{ano:04d}-{mes:02d}")
+
+
+@bp.route("/relatorios/fechamento.<formato>")
+def exportar_fechamento(formato):
+    if formato not in ("pdf", "xlsx"):
+        return Response(status=404)
+    ano, mes = parse_mes(request.args.get("mes"))
+    f = relatorio.fechamento(ano, mes)
+    nome = f"fechamento-{ano:04d}-{mes:02d}.{formato}"
+    if formato == "pdf":
+        corpo, tipo = relatorio.gerar_pdf_fechamento(f), "application/pdf"
+    else:
+        corpo = relatorio.gerar_xlsx_fechamento(f)
+        tipo = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    return Response(corpo, mimetype=tipo,
+                    headers={"Content-Disposition": f'attachment; filename="{nome}"'})
+
+
 @bp.route("/relatorios/debitos")
 def debitos():
     return render_template("relatorio_debitos.html", d=relatorio.debitos())

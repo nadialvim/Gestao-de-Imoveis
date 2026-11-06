@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Fechamento por pessoa{% endblock %}
+{% block heading %}Fechamento de {{ f.competencia|mes_br }}{% endblock %}
+{% block subtitle %}<div class="sub">Quanto cada pessoa recebeu, por forma de pagamento, e as despesas que ela pagou.</div>{% endblock %}
+{% block actions %}
+  <form method="get" class="d-flex gap-2">
+    <input type="month" name="mes" value="{{ mes }}" class="form-control" aria-label="Mês">
+    <button class="btn btn-outline-secondary" title="Ver"><i class="bi bi-search"></i></button>
+  </form>
+  <a class="btn btn-danger" href="{{ url_for('main.exportar_fechamento', formato='pdf', mes=mes) }}"><i class="bi bi-file-earmark-pdf me-1"></i>PDF</a>
+  <a class="btn btn-success" href="{{ url_for('main.exportar_fechamento', formato='xlsx', mes=mes) }}"><i class="bi bi-file-earmark-excel me-1"></i>Excel</a>
+{% endblock %}
+{% block content %}
+<div class="row g-3 mb-4">
+  {% for p in f.pessoas %}
+  <div class="col-12 col-lg">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-person-circle me-1"></i>{{ p.nome }}</span>
+        <span class="text-muted fw-normal small">{{ p.qtd }} pagamento(s)</span>
+      </div>
+      <div class="card-body">
+        <div class="d-flex justify-content-between"><span class="text-muted">Recebido</span><strong class="text-money text-success">{{ p.recebido|brl }}</strong></div>
+        <div class="d-flex justify-content-between"><span class="text-muted">Despesas pagas</span><strong class="text-money text-danger">− {{ p.gasto|brl }}</strong></div>
+        <hr class="my-2">
+        <div class="d-flex justify-content-between fs-5"><span>Saldo</span><strong class="text-money">{{ p.saldo|brl }}</strong></div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="card mb-4">
+  <div class="card-header"><i class="bi bi-table me-1"></i>Resumo por forma de pagamento</div>
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead><tr>
+        <th>Pessoa</th>
+        {% for forma in f.formas %}<th class="text-end">{{ forma.replace(" bancária (TED/DOC)", "") }}</th>{% endfor %}
+        <th class="text-end">Recebido</th><th class="text-end">Despesas</th><th class="text-end">Saldo</th>
+      </tr></thead>
+      <tbody>
+        {% for p in f.pessoas %}
+        <tr>
+          <td class="fw-semibold">{{ p.nome }}</td>
+          {% for forma in f.formas %}<td class="text-end text-money">{{ p.por_forma[forma]|brl }}</td>{% endfor %}
+          <td class="text-end text-money">{{ p.recebido|brl }}</td>
+          <td class="text-end text-money">{{ p.gasto|brl }}</td>
+          <td class="text-end text-money fw-semibold">{{ p.saldo|brl }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot><tr class="fw-bold">
+        <td>Total</td>
+        {% for forma in f.formas %}<td class="text-end text-money">{{ f.totais_forma[forma]|brl }}</td>{% endfor %}
+        <td class="text-end text-money">{{ f.total_recebido|brl }}</td>
+        <td class="text-end text-money">{{ f.total_despesas|brl }}</td>
+        <td class="text-end text-money">{{ f.saldo|brl }}</td>
+      </tr></tfoot>
+    </table>
+  </div>
+</div>
+
+{% for p in f.pessoas %}
+<div class="card mb-4">
+  <div class="card-header"><i class="bi bi-person-circle me-1"></i>{{ p.nome }} — pagamentos recebidos</div>
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead><tr><th>Data</th><th>Referência</th><th>Inquilino</th><th>Imóvel</th><th>Forma</th><th class="text-end">Valor</th></tr></thead>
+      <tbody>
+        {% for x in p.pagamentos %}
+        <tr><td>{{ x.data_pagamento|data_br }}</td><td>{{ x.competencia|mes_br }}</td>
+            <td>{{ x.contrato.inquilino.nome }}</td><td>{{ x.contrato.imovel }}</td>
+            <td>{{ x.forma_pagamento or '' }}</td><td class="text-end text-money">{{ x.valor_pago|brl }}</td></tr>
+        {% else %}
+        <tr><td colspan="6"><div class="empty py-3">Nenhum pagamento recebido por {{ p.nome }} neste mês.</div></td></tr>
+        {% endfor %}
+      </tbody>
+      <tfoot><tr class="fw-bold"><td colspan="5" class="text-end">Total recebido</td><td class="text-end text-money">{{ p.recebido|brl }}</td></tr></tfoot>
+    </table>
+  </div>
+  {% if p.despesas %}
+  <div class="card-header border-top"><i class="bi bi-receipt me-1"></i>Despesas pagas por {{ p.nome }}</div>
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th class="text-end">Valor</th></tr></thead>
+      <tbody>
+        {% for x in p.despesas %}
+        <tr><td>{{ x.data|data_br }}</td><td>{{ x.descricao }}</td><td>{{ x.categoria or '' }}</td><td class="text-end text-money">{{ x.valor|brl }}</td></tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr class="fw-bold"><td colspan="3" class="text-end">Total de despesas</td><td class="text-end text-money">{{ p.gasto|brl }}</td></tr>
+        <tr class="fw-bold"><td colspan="3" class="text-end">Saldo (recebido − despesas)</td><td class="text-end text-money">{{ p.saldo|brl }}</td></tr>
+      </tfoot>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endfor %}
+{% endblock %}

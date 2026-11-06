@@ -14,7 +14,7 @@ from sqlalchemy import func
 
 from ..extensions import db
 from ..formatting import brl, data_br, mes_br
-from ..models import Contrato, Despesa, Pagamento
+from ..models import FORMAS_PAGAMENTO, NAO_INFORMADO, RECEBEDORES, Contrato, Despesa, Pagamento
 from .periodo import intervalo_mes
 
 
@@ -124,6 +124,160 @@ def debitos(hoje=None):
         item["meses"].sort(key=lambda x: x["vencimento"])
     return {"hoje": hoje, "inquilinos": lista,
             "total": sum((i["total"] for i in lista), Decimal("0"))}
+
+
+def fechamento(ano, mes):
+    """Fechamento do mês por pessoa: recebido (por forma de pagamento), despesas pagas e saldo."""
+    d = dados_mes(ano, mes)
+    ZERO = Decimal("0")
+
+    def pessoa_de(nome):
+        return nome if nome in RECEBEDORES else NAO_INFORMADO
+
+    nomes = list(RECEBEDORES)
+    if (any(pessoa_de(p.recebido_por) == NAO_INFORMADO for p in d["pagamentos"])
+            or any(pessoa_de(x.pago_por) == NAO_INFORMADO for x in d["despesas"])):
+        nomes.append(NAO_INFORMADO)
+
+    pessoas = []
+    for nome in nomes:
+        pagamentos = [p for p in d["pagamentos"] if pessoa_de(p.recebido_por) == nome]
+        despesas = [x for x in d["despesas"] if pessoa_de(x.pago_por) == nome]
+        por_forma = {f: sum((p.valor_pago for p in pagamentos if p.forma_pagamento == f), ZERO)
+                     for f in FORMAS_PAGAMENTO}
+        por_forma["Outras / não informada"] = sum(
+            (p.valor_pago for p in pagamentos if p.forma_pagamento not in FORMAS_PAGAMENTO), ZERO)
+        recebido = sum((p.valor_pago for p in pagamentos), ZERO)
+        gasto = sum((x.valor for x in despesas), ZERO)
+        pessoas.append({"nome": nome, "pagamentos": pagamentos, "despesas": despesas,
+                        "por_forma": por_forma, "qtd": len(pagamentos), "recebido": recebido,
+                        "gasto": gasto, "saldo": recebido - gasto})
+    formas = list(FORMAS_PAGAMENTO) + ["Outras / não informada"]
+    totais_forma = {f: sum((p["por_forma"][f] for p in pessoas), ZERO) for f in formas}
+    return {"ano": ano, "mes": mes, "competencia": d["competencia"], "pessoas": pessoas,
+            "formas": formas, "totais_forma": totais_forma,
+            "total_recebido": d["total_recebido"], "total_despesas": d["total_despesas"],
+            "saldo": d["saldo"]}
+
+
+def gerar_xlsx_fechamento(f):
+    wb = Workbook()
+    negrito = Font(bold=True)
+    moeda = '"R$" #,##0.00'
+
+    ws = wb.active
+    ws.title = "Resumo"
+    ws.append([f"Fechamento por pessoa — {mes_br(f['competencia'])}"])
+    ws["A1"].font = Font(bold=True, size=14)
+    ws.append([])
+    ws.append(["Pessoa"] + f["formas"] + ["Total recebido", "Despesas pagas", "Saldo"])
+    for c in ws[3]:
+        c.font = negrito
+        c.alignment = Alignment(horizontal="center", wrap_text=True)
+    for p in f["pessoas"]:
+        ws.append([p["nome"]] + [float(p["por_forma"][x]) for x in f["formas"]]
+                  + [float(p["recebido"]), float(p["gasto"]), float(p["saldo"])])
+    ws.append(["Total"] + [float(f["totais_forma"][x]) for x in f["formas"]]
+              + [float(f["total_recebido"]), float(f["total_despesas"]), float(f["saldo"])])
+    for c in ws[ws.max_row]:
+        c.font = negrito
+    for row in ws.iter_rows(min_row=4):
+        for c in row[1:]:
+            c.number_format = moeda
+    ws.column_dimensions["A"].width = 18
+    for col in "BCDEFGH":
+        ws.column_dimensions[col].width = 18
+
+    for p in f["pessoas"]:
+        s = wb.create_sheet(p["nome"][:31])
+        s.append([f"{p['nome']} — {mes_br(f['competencia'])}"])
+        s["A1"].font = Font(bold=True, size=13)
+        s.append([])
+        s.append(["Pagamentos recebidos"])
+        s.cell(s.max_row, 1).font = negrito
+        s.append(["Data", "Referência", "Inquilino", "Imóvel", "Forma", "Valor"])
+        for c in s[s.max_row]:
+            c.font = negrito
+        for x in p["pagamentos"]:
+            s.append([x.data_pagamento, mes_br(x.competencia), x.contrato.inquilino.nome,
+                      str(x.contrato.imovel), x.forma_pagamento or "", float(x.valor_pago)])
+            s.cell(s.max_row, 1).number_format = "DD/MM/YYYY"
+            s.cell(s.max_row, 6).number_format = moeda
+        s.append(["", "", "", "", "Total recebido", float(p["recebido"])])
+        s.cell(s.max_row, 5).font = negrito
+        s.cell(s.max_row, 6).number_format = moeda
+        s.cell(s.max_row, 6).font = negrito
+        s.append([])
+        s.append(["Despesas pagas"])
+        s.cell(s.max_row, 1).font = negrito
+        s.append(["Data", "Descrição", "Categoria", "Prédio", "", "Valor"])
+        for c in s[s.max_row]:
+            c.font = negrito
+        for x in p["despesas"]:
+            s.append([x.data, x.descricao, x.categoria or "", x.predio.nome if x.predio else "", "",
+                      float(x.valor)])
+            s.cell(s.max_row, 1).number_format = "DD/MM/YYYY"
+            s.cell(s.max_row, 6).number_format = moeda
+        s.append(["", "", "", "", "Total de despesas", float(p["gasto"])])
+        s.append(["", "", "", "", "SALDO (recebido − despesas)", float(p["saldo"])])
+        for r in (s.max_row - 1, s.max_row):
+            s.cell(r, 5).font = negrito
+            s.cell(r, 6).number_format = moeda
+            s.cell(r, 6).font = negrito
+        for col, w in zip("ABCDEF", (12, 34, 28, 34, 28, 16)):
+            s.column_dimensions[col].width = w
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def gerar_pdf_fechamento(f):
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=36, rightMargin=36, topMargin=36,
+                            bottomMargin=36, title=f"Fechamento {mes_br(f['competencia'])}")
+    estilos = getSampleStyleSheet()
+    el = [Paragraph(f"Fechamento por pessoa — {mes_br(f['competencia'])}", estilos["Title"])]
+
+    def tabela(dados, larguras, total_linhas=1, alinhar_direita_a_partir=1):
+        t = Table(dados, colWidths=larguras, repeatRows=1)
+        estilo = [("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2c3e50")),
+                  ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                  ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                  ("FONTSIZE", (0, 0), (-1, -1), 8), ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+                  ("ALIGN", (alinhar_direita_a_partir, 0), (-1, -1), "RIGHT"),
+                  ("VALIGN", (0, 0), (-1, -1), "MIDDLE")]
+        if total_linhas:
+            estilo.append(("FONTNAME", (0, -total_linhas), (-1, -1), "Helvetica-Bold"))
+        t.setStyle(TableStyle(estilo))
+        return t
+
+    cab = ["Pessoa"] + [x.replace(" bancária (TED/DOC)", "") for x in f["formas"]] \
+        + ["Recebido", "Despesas", "Saldo"]
+    linhas = [[p["nome"]] + [brl(p["por_forma"][x]) for x in f["formas"]]
+              + [brl(p["recebido"]), brl(p["gasto"]), brl(p["saldo"])] for p in f["pessoas"]]
+    linhas.append(["Total"] + [brl(f["totais_forma"][x]) for x in f["formas"]]
+                  + [brl(f["total_recebido"]), brl(f["total_despesas"]), brl(f["saldo"])])
+    n = len(cab)
+    el.append(tabela([cab] + linhas, [60] + [(523 - 60) / (n - 1)] * (n - 1)))
+
+    for p in f["pessoas"]:
+        el += [Spacer(1, 14), Paragraph(f"{p['nome']}", estilos["Heading2"])]
+        linhas = [[data_br(x.data_pagamento), mes_br(x.competencia), x.contrato.inquilino.nome,
+                   str(x.contrato.imovel), x.forma_pagamento or "", brl(x.valor_pago)]
+                  for x in p["pagamentos"]]
+        linhas.append(["", "", "", "", "Total recebido", brl(p["recebido"])])
+        el.append(tabela([["Data", "Referência", "Inquilino", "Imóvel", "Forma", "Valor"]] + linhas,
+                         [52, 62, 95, 150, 94, 70], alinhar_direita_a_partir=5))
+        el.append(Spacer(1, 6))
+        linhas = [[data_br(x.data), x.descricao, x.categoria or "", brl(x.valor)]
+                  for x in p["despesas"]]
+        linhas.append(["", "", "Total de despesas", brl(p["gasto"])])
+        linhas.append(["", "", "SALDO (recebido − despesas)", brl(p["saldo"])])
+        el.append(tabela([["Data", "Despesa", "Categoria", "Valor"]] + linhas,
+                         [52, 230, 151, 90], total_linhas=2, alinhar_direita_a_partir=3))
+    doc.build(el)
+    return buf.getvalue()
 
 
 def gerar_xlsx(d):
