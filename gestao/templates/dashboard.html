@@ -1,11 +1,18 @@
 {% extends "base.html" %}
+{% block title %}Início — Gestão de Imóveis{% endblock %}
+{% block heading %}Resumo de {{ d.competencia|mes_br }}{% endblock %}
+{% block actions %}
+  <a class="btn btn-primary" href="{{ url_for('crud.novo', slug='pagamentos') }}"><i class="bi bi-plus-lg me-1"></i>Registrar pagamento</a>
+  <a class="btn btn-outline-primary" href="{{ url_for('crud.novo', slug='despesas') }}"><i class="bi bi-plus-lg me-1"></i>Registrar despesa</a>
+{% endblock %}
 {% block content %}
-<h1 class="h3 mb-3">Resumo de {{ d.competencia|mes_br }}</h1>
 {% include "_resumo.html" %}
-<div class="d-flex flex-wrap gap-2 mb-2">
-  <a class="btn btn-primary" href="{{ url_for('crud.novo', slug='pagamentos') }}">Registrar pagamento</a>
-  <a class="btn btn-outline-primary" href="{{ url_for('crud.novo', slug='despesas') }}">Registrar despesa</a>
-  <a class="btn btn-outline-secondary" href="{{ url_for('main.relatorios') }}">Relatório do mês</a>
+<div class="card mb-4">
+  <div class="card-header"><i class="bi bi-bar-chart me-1"></i>Recebido x Despesas (últimos 6 meses)</div>
+  <div class="card-body">
+    <div class="chart-box"><canvas id="grafico-meses" data-serie='{{ serie|tojson|forceescape }}'></canvas></div>
+  </div>
 </div>
 {% include "_pendentes.html" %}
 {% endblock %}
+{% block scripts %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>{% endblock %}

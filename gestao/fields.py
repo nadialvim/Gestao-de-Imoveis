@@ -5,6 +5,16 @@ from typing import Callable, Optional
 
 
 @dataclass
+class Badge:
+    """Valor de coluna exibido como etiqueta colorida (cor = sufixo de classe Bootstrap)."""
+    texto: str
+    cor: str = "secondary"
+
+    def __str__(self):
+        return self.texto
+
+
+@dataclass
 class Field:
     name: str
     label: str
@@ -12,6 +22,7 @@ class Field:
     required: bool = True
     choices: Optional[Callable] = None  # select: () -> [(id, label)]
     default: Optional[object] = None
+    wide: bool = False  # ocupa a linha inteira no formulário de 2 colunas
 
     def parse(self, raw):
         if self.kind == "bool":

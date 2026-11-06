@@ -9,7 +9,8 @@ bp = Blueprint("main", __name__)
 @bp.route("/")
 def dashboard():
     ano, mes = parse_mes(None)
-    return render_template("dashboard.html", d=relatorio.dados_mes(ano, mes))
+    return render_template("dashboard.html", d=relatorio.dados_mes(ano, mes),
+                           serie=relatorio.serie_meses(ano, mes))
 
 
 @bp.route("/relatorios/")

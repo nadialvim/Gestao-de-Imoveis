@@ -64,6 +64,27 @@ def dados_mes(ano, mes):
     }
 
 
+def serie_meses(ano, mes, n=6):
+    """Totais recebidos e de despesas dos últimos n meses (inclui o mês dado)."""
+    itens = []
+    a, m = ano, mes
+    for _ in range(n):
+        itens.append((a, m))
+        a, m = (a - 1, 12) if m == 1 else (a, m - 1)
+    itens.reverse()
+    saida = []
+    for a, m in itens:
+        inicio, fim = intervalo_mes(a, m)
+        rec = (db.session.query(func.coalesce(func.sum(Pagamento.valor_pago), 0))
+               .filter(Pagamento.data_pagamento >= inicio,
+                       Pagamento.data_pagamento <= fim).scalar())
+        desp = (db.session.query(func.coalesce(func.sum(Despesa.valor), 0))
+                .filter(Despesa.data >= inicio, Despesa.data <= fim).scalar())
+        saida.append({"rotulo": mes_br(date(a, m, 1)), "recebido": float(rec),
+                      "despesas": float(desp)})
+    return saida
+
+
 def gerar_xlsx(d):
     wb = Workbook()
     negrito = Font(bold=True)

@@ -184,3 +184,28 @@ def test_vercel_rejeita_conexao_direta_supabase(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "postgresql://postgres:x@db.abc.supabase.co:6543/postgres")
     with pytest.raises(RuntimeError, match="Transaction pooler"):
         create_app({"SECRET_KEY": "abc"})
+
+
+def test_serie_meses(base):
+    _, a, _, i = base
+    c = novo_contrato(i, a=a)
+    db.session.add_all([
+        Pagamento(contrato=c, competencia=date(2026, 1, 1),
+                  data_pagamento=date(2026, 1, 5), valor_pago=Decimal("1000")),
+        Despesa(data=date(2025, 12, 10), descricao="x", valor=Decimal("40")),
+    ])
+    db.session.commit()
+    s = relatorio.serie_meses(2026, 1, n=3)
+    assert [x["rotulo"] for x in s] == ["novembro/2025", "dezembro/2025", "janeiro/2026"]
+    assert [x["recebido"] for x in s] == [0.0, 0.0, 1000.0]
+    assert [x["despesas"] for x in s] == [0.0, 40.0, 0.0]
+
+
+def test_layout_menu_lateral_e_busca(client, base):
+    html = client.get("/").get_data(as_text=True)
+    assert 'class="sidebar"' in html and "grafico-meses" in html
+    p, *_ = base
+    html = client.get("/c/predios/").get_data(as_text=True)
+    assert 'id="busca"' in html and "Ed. Sol" in html
+    assert client.get("/static/app.css").status_code == 200
+    assert client.get("/static/app.js").status_code == 200

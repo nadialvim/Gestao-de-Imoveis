@@ -1,6 +1,6 @@
 from datetime import date
 
-from .fields import Field, Resource
+from .fields import Badge, Field, Resource
 from .formatting import brl, data_br, mes_br
 from .models import (Apartamento, Contrato, Despesa, Inquilino, Pagamento,
                      Predio, Vaga)
@@ -67,7 +67,7 @@ RESOURCES = {r.slug: r for r in [
     Resource(
         "predios", Predio, "Prédio", "Prédios",
         fields=[Field("nome", "Nome"),
-                Field("endereco", "Endereço", required=False)],
+                Field("endereco", "Endereço", required=False, wide=True)],
         columns=[("Nome", lambda o: o.nome), ("Endereço", lambda o: o.endereco or "")],
         order=lambda: [Predio.nome],
     ),
@@ -75,7 +75,7 @@ RESOURCES = {r.slug: r for r in [
         "apartamentos", Apartamento, "Apartamento", "Apartamentos",
         fields=[Field("predio_id", "Prédio", "select", choices=opcoes_predios),
                 Field("numero", "Número / identificação"),
-                Field("descricao", "Descrição", required=False),
+                Field("descricao", "Descrição", required=False, wide=True),
                 Field("valor_aluguel_padrao", "Aluguel padrão (R$)", "money",
                       required=False)],
         columns=[("Prédio", lambda o: o.predio.nome), ("Apto", lambda o: o.numero),
@@ -121,7 +121,7 @@ RESOURCES = {r.slug: r for r in [
                  ("Imóvel", lambda o: str(o.imovel)),
                  ("Período", lambda o: f"{data_br(o.data_inicio)} a {data_br(o.data_fim)}"),
                  ("Valor mensal", lambda o: brl(o.valor_mensal)),
-                 ("Ativo", lambda o: "Sim" if o.ativo else "Não")],
+                 ("Situação", lambda o: Badge("Ativo", "success") if o.ativo else Badge("Inativo", "secondary"))],
         order=lambda: [Contrato.ativo.desc(), Contrato.data_inicio.desc()],
         validate=validar_contrato,
     ),
@@ -132,7 +132,7 @@ RESOURCES = {r.slug: r for r in [
                 Field("data_pagamento", "Data do pagamento", "date"),
                 Field("valor_pago", "Valor recebido (R$)", "money"),
                 Field("forma_pagamento", "Forma (Pix, dinheiro...)", required=False),
-                Field("observacao", "Observação", required=False)],
+                Field("observacao", "Observação", required=False, wide=True)],
         columns=[("Data", lambda o: data_br(o.data_pagamento)),
                  ("Referência", lambda o: mes_br(o.competencia)),
                  ("Contrato", lambda o: str(o.contrato)),
@@ -147,7 +147,7 @@ RESOURCES = {r.slug: r for r in [
     Resource(
         "despesas", Despesa, "Despesa", "Despesas",
         fields=[Field("data", "Data", "date"),
-                Field("descricao", "Descrição"),
+                Field("descricao", "Descrição", wide=True),
                 Field("categoria", "Categoria (condomínio, reparo...)", required=False),
                 Field("valor", "Valor (R$)", "money"),
                 Field("predio_id", "Prédio (opcional)", "select", required=False,
