@@ -1,7 +1,15 @@
 {% extends "base.html" %}
 {% block title %}Início — Gestão de Imóveis{% endblock %}
 {% block heading %}Resumo de {{ d.competencia|mes_br }}{% endblock %}
+{% block subtitle %}{% if pessoa %}<div class="sub"><i class="bi bi-funnel me-1"></i>Mostrando só o que <strong>{{ pessoa }}</strong> recebeu e pagou. Pendências e ocupação consideram todos.</div>{% endif %}{% endblock %}
 {% block actions %}
+  <form method="get" class="d-flex align-items-center gap-2" id="filtro-pessoa">
+    <label class="text-muted small mb-0" for="pessoa"><i class="bi bi-person me-1"></i>Pessoa</label>
+    <select name="pessoa" id="pessoa" class="form-select" style="width:auto" onchange="this.form.submit()">
+      <option value="">Todos</option>
+      {% for nome in pessoas %}<option value="{{ nome }}" {% if pessoa == nome %}selected{% endif %}>{{ nome }}</option>{% endfor %}
+    </select>
+  </form>
   <a class="btn btn-primary" href="{{ url_for('crud.novo', slug='alugueis') }}"><i class="bi bi-key me-1"></i>Novo aluguel</a>
   <a class="btn btn-outline-primary" href="{{ url_for('crud.novo', slug='pagamentos') }}"><i class="bi bi-cash-coin me-1"></i>Registrar pagamento</a>
   <a class="btn btn-outline-primary" href="{{ url_for('crud.novo', slug='despesas') }}"><i class="bi bi-receipt me-1"></i>Nova despesa</a>
@@ -29,7 +37,7 @@
   </div>
 </div>
 <div class="card mb-4">
-  <div class="card-header"><i class="bi bi-bar-chart me-1"></i>Recebido x Despesas (últimos 6 meses)</div>
+  <div class="card-header"><i class="bi bi-bar-chart me-1"></i>Recebido x Despesas (últimos 6 meses){% if pessoa %} — {{ pessoa }}{% endif %}</div>
   <div class="card-body">
     <div class="chart-box"><canvas id="grafico-meses" data-serie='{{ serie|tojson|forceescape }}'></canvas></div>
   </div>

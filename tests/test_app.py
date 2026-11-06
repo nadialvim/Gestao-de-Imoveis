@@ -611,3 +611,61 @@ def test_despesa_exige_pago_por_e_filtros_por_pessoa(client, base):
     db.session.commit()
     corpo = client.get("/c/pagamentos/?mes=2026-03&recebido_por=Sergio").get_data(as_text=True).split("<tbody>")[1]
     assert "R$ 600,00" in corpo and "Sergio" in corpo and "Fagner" not in corpo
+
+
+# ---------------------------------------------------------------- filtro por pessoa e PDFs
+def test_dados_mes_e_serie_filtrados_por_pessoa(base):
+    _fechamento_base(base)
+    todos = relatorio.dados_mes(2026, 3)
+    sergio = relatorio.dados_mes(2026, 3, "Sergio")
+    fagner = relatorio.dados_mes(2026, 3, "Fagner")
+    assert sergio["total_recebido"] == Decimal("850") and sergio["total_despesas"] == Decimal("100")
+    assert fagner["total_recebido"] == Decimal("400") and fagner["total_despesas"] == Decimal("30")
+    assert sergio["saldo"] == Decimal("750") and fagner["pessoa"] == "Fagner"
+    assert todos["total_recebido"] == Decimal("1300") and todos["pessoa"] is None
+    # nome desconhecido equivale a "todos"
+    assert relatorio.dados_mes(2026, 3, "Ninguem")["total_recebido"] == todos["total_recebido"]
+    s_fagner = relatorio.serie_meses(2026, 3, n=2, pessoa="Fagner")
+    assert [x["recebido"] for x in s_fagner] == [0.0, 400.0] and [x["despesas"] for x in s_fagner] == [0.0, 30.0]
+    s_todos = relatorio.serie_meses(2026, 3, n=2)
+    assert s_todos[1]["recebido"] == 1300.0 and s_todos[0]["recebido"] == 0.0  # fev vazio; mar total
+    # pendências não dependem da pessoa
+    assert len(sergio["pendentes"]) == len(todos["pendentes"])
+
+
+def test_dashboard_com_filtro_de_pessoa(client, base, monkeypatch):
+    _fechamento_base(base)
+    from datetime import date as _date
+
+    class _Hoje(_date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 3, 15)
+
+    monkeypatch.setattr("gestao.services.periodo.date", _Hoje)
+    html = client.get("/").get_data(as_text=True)
+    assert 'id="pessoa"' in html and "Todos" in html and "R$ 1.300,00" in html
+    html = client.get("/?pessoa=Fagner").get_data(as_text=True)
+    assert "Mostrando só o que" in html and "Fagner" in html
+    assert "R$ 400,00" in html and "R$ 1.300,00" not in html
+    assert '<option value="Fagner" selected>' in html
+    assert "Mostrando só o que" not in client.get("/?pessoa=Outro").get_data(as_text=True)
+
+
+def test_pdfs_legiveis_com_textos_e_paginas(base):
+    pymupdf = pytest.importorskip("pymupdf")
+    _fechamento_base(base)
+    pdf = relatorio.gerar_pdf_fechamento(relatorio.fechamento(2026, 3))
+    doc = pymupdf.open(stream=pdf, filetype="pdf")
+    texto = "\n".join(p.get_text() for p in doc)
+    for esperado in ("Fechamento por pessoa", "Sergio", "Fagner", "Não informado", "R$ 850,00",
+                     "R$ 750,00", "Total recebido", "Saldo", f"Página 1 de {len(doc)}"):
+        assert esperado in texto, esperado
+    # nada fora das margens da página (tabelas dentro da área útil)
+    for pagina in doc:
+        for bloco in pagina.get_text("blocks"):
+            assert bloco[0] >= 30 and bloco[2] <= pagina.rect.width - 30, bloco
+    mensal = pymupdf.open(stream=relatorio.gerar_pdf(relatorio.dados_mes(2026, 3, "Sergio")),
+                          filetype="pdf")
+    texto = "\n".join(p.get_text() for p in mensal)
+    assert "somente Sergio" in texto and "R$ 850,00" in texto and "Fagner" not in texto.split("Despesas")[0]

@@ -6,30 +6,39 @@ from decimal import Decimal
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from sqlalchemy import func
 
 from ..extensions import db
-from ..formatting import brl, data_br, mes_br
+from ..formatting import MESES, brl, data_br, mes_br
 from ..models import FORMAS_PAGAMENTO, NAO_INFORMADO, RECEBEDORES, Contrato, Despesa, Pagamento
+from . import pdf
 from .periodo import intervalo_mes
 
+MESES_CURTOS = [m[:3] for m in MESES]
 
-def dados_mes(ano, mes):
-    """Consolida recebimentos, despesas e pendências de um mês."""
+
+def pessoa_valida(pessoa):
+    """Nome de um recebedor conhecido (Sergio/Fagner) ou None (= todos)."""
+    return pessoa if pessoa in RECEBEDORES else None
+
+
+def dados_mes(ano, mes, pessoa=None):
+    """Consolida recebimentos, despesas e pendências de um mês.
+
+    Com `pessoa`, considera só o que ela recebeu (pagamentos) e pagou (despesas);
+    as pendências continuam sendo de todos os contratos."""
     inicio, fim = intervalo_mes(ano, mes)
     competencia = date(ano, mes, 1)
+    pessoa = pessoa_valida(pessoa)
 
-    pagamentos = (Pagamento.query
-                  .filter(Pagamento.data_pagamento >= inicio,
-                          Pagamento.data_pagamento <= fim)
-                  .order_by(Pagamento.data_pagamento, Pagamento.id).all())
-    despesas = (Despesa.query
-                .filter(Despesa.data >= inicio, Despesa.data <= fim)
-                .order_by(Despesa.data, Despesa.id).all())
+    q_pagamentos = Pagamento.query.filter(Pagamento.data_pagamento >= inicio,
+                                          Pagamento.data_pagamento <= fim)
+    q_despesas = Despesa.query.filter(Despesa.data >= inicio, Despesa.data <= fim)
+    if pessoa:
+        q_pagamentos = q_pagamentos.filter(Pagamento.recebido_por == pessoa)
+        q_despesas = q_despesas.filter(Despesa.pago_por == pessoa)
+    pagamentos = q_pagamentos.order_by(Pagamento.data_pagamento, Pagamento.id).all()
+    despesas = q_despesas.order_by(Despesa.data, Despesa.id).all()
 
     total_recebido = sum((p.valor_pago for p in pagamentos), Decimal("0"))
     total_despesas = sum((d.valor for d in despesas), Decimal("0"))
@@ -62,12 +71,14 @@ def dados_mes(ano, mes):
         "ano": ano, "mes": mes, "competencia": competencia,
         "pagamentos": pagamentos, "despesas": despesas,
         "total_recebido": total_recebido, "total_despesas": total_despesas,
-        "saldo": total_recebido - total_despesas, "pendentes": pendentes,
+        "saldo": total_recebido - total_despesas, "pendentes": pendentes, "pessoa": pessoa,
     }
 
 
-def serie_meses(ano, mes, n=6):
-    """Totais recebidos e de despesas dos últimos n meses (inclui o mês dado)."""
+def serie_meses(ano, mes, n=6, pessoa=None):
+    """Totais recebidos e de despesas dos últimos n meses (inclui o mês dado).
+    Com `pessoa`, só o que ela recebeu e pagou."""
+    pessoa = pessoa_valida(pessoa)
     itens = []
     a, m = ano, mes
     for _ in range(n):
@@ -77,11 +88,14 @@ def serie_meses(ano, mes, n=6):
     saida = []
     for a, m in itens:
         inicio, fim = intervalo_mes(a, m)
-        rec = (db.session.query(func.coalesce(func.sum(Pagamento.valor_pago), 0))
-               .filter(Pagamento.data_pagamento >= inicio,
-                       Pagamento.data_pagamento <= fim).scalar())
-        desp = (db.session.query(func.coalesce(func.sum(Despesa.valor), 0))
-                .filter(Despesa.data >= inicio, Despesa.data <= fim).scalar())
+        q_rec = (db.session.query(func.coalesce(func.sum(Pagamento.valor_pago), 0))
+                 .filter(Pagamento.data_pagamento >= inicio, Pagamento.data_pagamento <= fim))
+        q_desp = (db.session.query(func.coalesce(func.sum(Despesa.valor), 0))
+                  .filter(Despesa.data >= inicio, Despesa.data <= fim))
+        if pessoa:
+            q_rec = q_rec.filter(Pagamento.recebido_por == pessoa)
+            q_desp = q_desp.filter(Despesa.pago_por == pessoa)
+        rec, desp = q_rec.scalar(), q_desp.scalar()
         saida.append({"rotulo": mes_br(date(a, m, 1)), "recebido": float(rec),
                       "despesas": float(desp)})
     return saida
@@ -232,52 +246,61 @@ def gerar_xlsx_fechamento(f):
     return buf.getvalue()
 
 
+def _ref(p):
+    """Referência curta (ex.: 'nov/2026') do mês a que o pagamento se refere."""
+    return f"{MESES_CURTOS[p.competencia.month - 1]}/{p.competencia.year}"
+
+
 def gerar_pdf_fechamento(f):
-    buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=36, rightMargin=36, topMargin=36,
-                            bottomMargin=36, title=f"Fechamento {mes_br(f['competencia'])}")
-    estilos = getSampleStyleSheet()
-    el = [Paragraph(f"Fechamento por pessoa — {mes_br(f['competencia'])}", estilos["Title"])]
+    buf, doc = pdf.novo_documento(f"Fechamento {mes_br(f['competencia'])}", "Fechamento por pessoa")
+    el = pdf.cabecalho("Fechamento por pessoa", f"Mês de referência: {mes_br(f['competencia'])}")
+    el.append(pdf.cartoes([("TOTAL RECEBIDO", brl(f["total_recebido"]), pdf.VERDE),
+                           ("DESPESAS PAGAS", brl(f["total_despesas"]), pdf.VERMELHO),
+                           ("SALDO", brl(f["saldo"]), pdf.PETROLEO)]))
 
-    def tabela(dados, larguras, total_linhas=1, alinhar_direita_a_partir=1):
-        t = Table(dados, colWidths=larguras, repeatRows=1)
-        estilo = [("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2c3e50")),
-                  ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                  ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                  ("FONTSIZE", (0, 0), (-1, -1), 8), ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
-                  ("ALIGN", (alinhar_direita_a_partir, 0), (-1, -1), "RIGHT"),
-                  ("VALIGN", (0, 0), (-1, -1), "MIDDLE")]
-        if total_linhas:
-            estilo.append(("FONTNAME", (0, -total_linhas), (-1, -1), "Helvetica-Bold"))
-        t.setStyle(TableStyle(estilo))
-        return t
-
-    cab = ["Pessoa"] + [x.replace(" bancária (TED/DOC)", "") for x in f["formas"]] \
-        + ["Recebido", "Despesas", "Saldo"]
-    linhas = [[p["nome"]] + [brl(p["por_forma"][x]) for x in f["formas"]]
-              + [brl(p["recebido"]), brl(p["gasto"]), brl(p["saldo"])] for p in f["pessoas"]]
-    linhas.append(["Total"] + [brl(f["totais_forma"][x]) for x in f["formas"]]
-                  + [brl(f["total_recebido"]), brl(f["total_despesas"]), brl(f["saldo"])])
-    n = len(cab)
-    el.append(tabela([cab] + linhas, [60] + [(523 - 60) / (n - 1)] * (n - 1)))
+    # Resumo: linhas = formas de pagamento; colunas = pessoas (+ total)
+    nomes = [p["nome"] for p in f["pessoas"]]
+    linhas = []
+    for forma in f["formas"]:
+        if forma == "Outras / não informada" and not f["totais_forma"][forma]:
+            continue
+        linhas.append([forma] + [brl(p["por_forma"][forma]) for p in f["pessoas"]]
+                      + [brl(f["totais_forma"][forma])])
+    linhas.append([pdf.negrito("Total recebido")] + [pdf.negrito(brl(p["recebido"])) for p in f["pessoas"]]
+                  + [pdf.negrito(brl(f["total_recebido"]))])
+    linhas.append(["(−) Despesas pagas"] + [brl(p["gasto"]) for p in f["pessoas"]]
+                  + [brl(f["total_despesas"])])
+    linhas.append([pdf.negrito("Saldo")] + [pdf.negrito(brl(p["saldo"])) for p in f["pessoas"]]
+                  + [pdf.negrito(brl(f["saldo"]))])
+    el += pdf.secao("Resumo por pessoa", 160)
+    el.append(pdf.tabela(["", *nomes, "Total"], linhas, [2.4] + [1.3] * (len(nomes) + 1),
+                         "l" + "r" * (len(nomes) + 1), n_totais=3))
+    el.append(pdf.nota("Saldo = total recebido − despesas pagas pela pessoa. Pagamentos e despesas "
+                       "sem pessoa informada aparecem em \"Não informado\"."))
 
     for p in f["pessoas"]:
-        el += [Spacer(1, 14), Paragraph(f"{p['nome']}", estilos["Heading2"])]
-        linhas = [[data_br(x.data_pagamento), mes_br(x.competencia), x.contrato.inquilino.nome,
-                   str(x.contrato.imovel), x.forma_pagamento or "", brl(x.valor_pago)]
+        el += pdf.secao(f"{p['nome']} — pagamentos recebidos ({p['qtd']})", 150)
+        linhas = [[data_br(x.data_pagamento), _ref(x), x.contrato.inquilino.nome,
+                   str(x.contrato.imovel), x.forma_pagamento or "—", brl(x.valor_pago)]
                   for x in p["pagamentos"]]
-        linhas.append(["", "", "", "", "Total recebido", brl(p["recebido"])])
-        el.append(tabela([["Data", "Referência", "Inquilino", "Imóvel", "Forma", "Valor"]] + linhas,
-                         [52, 62, 95, 150, 94, 70], alinhar_direita_a_partir=5))
-        el.append(Spacer(1, 6))
-        linhas = [[data_br(x.data), x.descricao, x.categoria or "", brl(x.valor)]
-                  for x in p["despesas"]]
-        linhas.append(["", "", "Total de despesas", brl(p["gasto"])])
-        linhas.append(["", "", "SALDO (recebido − despesas)", brl(p["saldo"])])
-        el.append(tabela([["Data", "Despesa", "Categoria", "Valor"]] + linhas,
-                         [52, 230, 151, 90], total_linhas=2, alinhar_direita_a_partir=3))
-    doc.build(el)
-    return buf.getvalue()
+        linhas.append(["", "", "", "", pdf.negrito("Total recebido"), pdf.negrito(brl(p["recebido"]))])
+        el.append(pdf.tabela(["Data", "Ref.", "Inquilino", "Imóvel", "Forma", "Valor"], linhas,
+                             [1.15, 1.0, 2.2, 2.7, 2.1, 1.5], "lllllr", n_totais=1,
+                             vazio=f"Nenhum pagamento recebido por {p['nome']} neste mês."))
+        if p["despesas"]:
+            el += pdf.secao(f"{p['nome']} — despesas pagas", 120)
+            linhas = [[data_br(x.data), x.descricao, x.categoria or "—",
+                       x.predio.nome if x.predio else "—", brl(x.valor)] for x in p["despesas"]]
+            linhas.append(["", "", "", pdf.negrito("Total de despesas"), pdf.negrito(brl(p["gasto"]))])
+            el.append(pdf.tabela(["Data", "Descrição", "Categoria", "Prédio", "Valor"], linhas,
+                                 [1.15, 3.2, 1.8, 1.9, 1.5], "llllr", n_totais=1))
+        el.append(pdf.juntos(pdf.espaco(6), pdf.tabela(
+            ["Fechamento de " + p["nome"], "Valor"],
+            [["Total recebido", brl(p["recebido"])],
+             ["(−) Despesas pagas", brl(p["gasto"])],
+             [pdf.negrito("Saldo de " + p["nome"]), pdf.negrito(brl(p["saldo"]))]],
+            [4, 1.5], "lr", n_totais=1)))
+    return pdf.construir(buf, doc, el)
 
 
 def gerar_xlsx(d):
@@ -332,56 +355,28 @@ def gerar_xlsx(d):
 
 
 def gerar_pdf(d):
-    buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=36, rightMargin=36,
-                            topMargin=36, bottomMargin=36,
-                            title=f"Relatório {mes_br(d['competencia'])}")
-    estilos = getSampleStyleSheet()
-    elementos = [Paragraph(f"Relatório mensal — {mes_br(d['competencia'])}",
-                           estilos["Title"])]
+    buf, doc = pdf.novo_documento(f"Relatório {mes_br(d['competencia'])}", "Relatório mensal")
+    sub = f"Mês de referência: {mes_br(d['competencia'])}"
+    if d.get("pessoa"):
+        sub += f" · somente {d['pessoa']}"
+    el = pdf.cabecalho("Relatório mensal", sub)
+    el.append(pdf.cartoes([("TOTAL RECEBIDO", brl(d["total_recebido"]), pdf.VERDE),
+                           ("DESPESAS", brl(d["total_despesas"]), pdf.VERMELHO),
+                           ("SALDO A REPASSAR", brl(d["saldo"]), pdf.PETROLEO)]))
 
-    def tabela(cabecalho, linhas, larguras, rodape=None):
-        dados = [cabecalho] + linhas + ([rodape] if rodape else [])
-        t = Table(dados, colWidths=larguras, repeatRows=1)
-        estilo = [
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2c3e50")),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("FONTSIZE", (0, 0), (-1, -1), 8),
-            ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
-            ("ALIGN", (-1, 0), (-1, -1), "RIGHT"),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ]
-        if rodape:
-            estilo.append(("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"))
-        t.setStyle(TableStyle(estilo))
-        return t
+    el += pdf.secao(f"Recebimentos ({len(d['pagamentos'])})", 150)
+    linhas = [[data_br(p.data_pagamento), _ref(p), p.contrato.inquilino.nome, str(p.contrato.imovel),
+               p.recebido_por or "—", brl(p.valor_pago)] for p in d["pagamentos"]]
+    linhas.append(["", "", "", "", pdf.negrito("Total"), pdf.negrito(brl(d["total_recebido"]))])
+    el.append(pdf.tabela(["Data", "Ref.", "Inquilino", "Imóvel", "Recebido por", "Valor"], linhas,
+                         [1.15, 1.0, 2.2, 2.7, 1.5, 1.5], "lllllr", n_totais=1,
+                         vazio="Nenhum recebimento no mês."))
 
-    resumo = Table([["Total recebido", brl(d["total_recebido"])],
-                    ["Total de despesas", brl(d["total_despesas"])],
-                    ["Saldo a repassar", brl(d["saldo"])]], colWidths=[150, 110])
-    resumo.setStyle(TableStyle([
-        ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
-        ("ALIGN", (1, 0), (1, -1), "RIGHT"),
-        ("LINEABOVE", (0, 2), (-1, 2), 0.75, colors.black),
-    ]))
-    elementos += [resumo, Spacer(1, 14), Paragraph("Recebimentos", estilos["Heading2"])]
-
-    linhas = [[data_br(p.data_pagamento), mes_br(p.competencia),
-               p.contrato.inquilino.nome, str(p.contrato.imovel), p.recebido_por or "",
-               brl(p.valor_pago)]
-              for p in d["pagamentos"]]
-    elementos.append(tabela(
-        ["Data", "Referência", "Inquilino", "Imóvel", "Recebido por", "Valor"], linhas,
-        [52, 66, 100, 160, 58, 70],
-        ["", "", "", "", "Total", brl(d["total_recebido"])]))
-
-    elementos += [Spacer(1, 14), Paragraph("Despesas", estilos["Heading2"])]
-    linhas = [[data_br(x.data), x.descricao, x.categoria or "", brl(x.valor)]
+    el += pdf.secao(f"Despesas ({len(d['despesas'])})", 130)
+    linhas = [[data_br(x.data), x.descricao, x.categoria or "—", x.pago_por or "—", brl(x.valor)]
               for x in d["despesas"]]
-    elementos.append(tabela(
-        ["Data", "Descrição", "Categoria", "Valor"], linhas,
-        [58, 250, 120, 70], ["", "", "Total", brl(d["total_despesas"])]))
-
-    doc.build(elementos)
-    return buf.getvalue()
+    linhas.append(["", "", "", pdf.negrito("Total"), pdf.negrito(brl(d["total_despesas"]))])
+    el.append(pdf.tabela(["Data", "Descrição", "Categoria", "Pago por", "Valor"], linhas,
+                         [1.15, 3.2, 1.8, 1.4, 1.5], "llllr", n_totais=1,
+                         vazio="Nenhuma despesa no mês."))
+    return pdf.construir(buf, doc, el)

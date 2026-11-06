@@ -44,7 +44,8 @@ O menu tem 6 itens: **Início, Imóveis, Inquilinos, Pagamentos, Despesas, Relat
 - **Pagamentos**: pelo botão *Registrar pagamento* da ficha (ou menu Pagamentos), o valor vem preenchido com o
   que falta no mês (editável); informe a forma (Pix, Dinheiro, Transferência) e quem recebeu (Sergio/Fagner).
   A coluna **Faltante** mostra o que falta em pagamentos parciais (complementos do mesmo mês são abatidos).
-- **Fechamento por pessoa** (Relatórios): para o mês escolhido mostra, para Sergio e Fagner, o total recebido (por Pix, Dinheiro e Transferência), a lista dos pagamentos, as despesas que cada um pagou (campo *Pago por* na despesa) e o saldo (recebido − despesas), com PDF e Excel.
+- **Início com filtro por pessoa**: o seletor *Pessoa* (Todos / Sergio / Fagner) faz os cartões de recebido, despesas e saldo e o gráfico dos 6 meses mostrarem só o que aquela pessoa recebeu e pagou (pendências e ocupação continuam de todos).
+- **Fechamento por pessoa** (Relatórios): para o mês escolhido mostra, para Sergio e Fagner, o total recebido (por Pix, Dinheiro e Transferência), a lista dos pagamentos, as despesas que cada um pagou (campo *Pago por* na despesa) e o saldo (recebido − despesas), com PDF e Excel (o PDF é paginado, com tabelas que quebram linha e totais em destaque).
 - **Relatórios** (abas *Mensal*, *Fechamento por pessoa* e *Inquilinos em débito*): o mensal lista os valores recebidos no mês (pela data
   do pagamento), as despesas e o saldo a repassar, com exportação em PDF/Excel; o de débito mostra, por
   inquilino, os meses vencidos e não pagos desde o início do aluguel.

@@ -1,6 +1,6 @@
 from flask import Blueprint, Response, render_template, request
 
-from ..models import Imovel
+from ..models import RECEBEDORES, Imovel
 from ..services import relatorio
 from ..services.periodo import parse_mes
 
@@ -10,12 +10,13 @@ bp = Blueprint("main", __name__)
 @bp.route("/")
 def dashboard():
     ano, mes = parse_mes(None)
+    pessoa = relatorio.pessoa_valida(request.args.get("pessoa"))  # None = todos
     imoveis = Imovel.query.all()
     alugados = sum(not i.disponivel for i in imoveis)
     ocupacao = {"total": len(imoveis), "alugados": alugados, "livres": len(imoveis) - alugados}
-    return render_template("dashboard.html", d=relatorio.dados_mes(ano, mes),
-                           serie=relatorio.serie_meses(ano, mes), ocupacao=ocupacao,
-                           debito=relatorio.debitos())
+    return render_template("dashboard.html", d=relatorio.dados_mes(ano, mes, pessoa),
+                           serie=relatorio.serie_meses(ano, mes, pessoa=pessoa), ocupacao=ocupacao,
+                           debito=relatorio.debitos(), pessoa=pessoa, pessoas=RECEBEDORES)
 
 
 @bp.route("/relatorios/")
