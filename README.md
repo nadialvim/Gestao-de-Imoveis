@@ -8,7 +8,7 @@ registrar pagamentos e despesas e exportar o relatório mensal (PDF/Excel). Hosp
 python -m venv .venv && .venv\Scripts\activate      # Windows
 pip install -r requirements-dev.txt
 copy .env.example .env                              # preencha com os dados do Supabase
-flask --app api.index run --debug
+flask --app app run --debug
 pytest                                              # testes (SQLite em memória)
 ```
 

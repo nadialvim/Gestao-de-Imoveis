@@ -8,14 +8,14 @@ Sistema web (pt-BR) de gestão de aluguéis de apartamentos e vagas de garagem: 
 ```bash
 python -m venv .venv && .venv\Scripts\activate
 pip install -r requirements-dev.txt
-flask --app api.index run --debug            # dev server (precisa de .env; sem DATABASE_URL usa SQLite local.db)
+flask --app app run --debug            # dev server (precisa de .env; sem DATABASE_URL usa SQLite local.db)
 pytest                                       # todos os testes (SQLite em memória, login desativado)
 pytest tests/test_app.py::test_relatorio_saldo   # um teste
 ```
 Schema do banco: `db/schema.sql` (aplicado manualmente no SQL Editor do Supabase; não há migrações). Alterou `gestao/models.py` → atualize o `schema.sql` à mão.
 
 ## Architecture
-- `api/index.py` é o entrypoint da Vercel (`app = create_app()`); `vercel.json` reescreve todas as rotas para ele. O pacote da aplicação é `gestao/` (factory em `gestao/__init__.py`).
+- `app.py` (raiz) é o entrypoint da Vercel (`app = create_app()`, detectado automaticamente; sem `vercel.json`/rewrites; o rewrite anterior para `/api/index` provavelmente causava 404 na raiz). O pacote da aplicação é `gestao/` (factory em `gestao/__init__.py`).
 - **CRUD genérico**: prédios, apartamentos, vagas, inquilinos, contratos, pagamentos e despesas não têm rota/template próprios. Cada um é um `Resource` declarativo em `gestao/resources.py` (campos, colunas, validação, filtro por mês), servido por `gestao/crud.py` em `/c/<slug>/` com `list.html`/`form.html`. Para novo cadastro, adicione um `Resource` (e o link no `base.html`). `gestao/fields.py` define `Field`/`Resource` e o parsing de formulário.
 - Regras de negócio ficam nas funções `validate` dos recursos (ex.: `validar_contrato`: contrato é de apartamento **ou** vaga, e não pode sobrepor contrato ativo do mesmo imóvel).
 - **Relatórios**: `gestao/services/relatorio.py` — `dados_mes()` consolida o mês (recebido por `data_pagamento`, despesas por `data`, pendências por `competencia` do contrato) e alimenta dashboard, tela de relatório, `gerar_pdf` (reportlab) e `gerar_xlsx` (openpyxl).
