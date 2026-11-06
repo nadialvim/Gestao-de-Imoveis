@@ -24,7 +24,7 @@ pytest                                              # testes (SQLite em memória
 4. Acesse a URL gerada e entre com um usuário do Supabase.
 
 ## Como usar
-Prédios (já com a lista de apartamentos e lojas; dá para adicionar mais depois) → Imóveis (apartamento/loja num prédio, ou casa independente) / Vagas → Inquilinos → Contratos (inquilino + imóvel + período; imóvel alugado só volta a ficar disponível ao **Dar baixa** no contrato) → Pagamentos
+Prédios (já com a lista de apartamentos e lojas; dá para adicionar mais depois) → Imóveis (apartamento/loja num prédio, ou casa independente) / Vagas → Inquilinos → alugar pelo botão **Alugar** do imóvel/vaga disponível (escolha ou cadastre o inquilino e informe o período; o valor é o do imóvel). O imóvel alugado só volta a ficar disponível ao **Dar baixa** → Pagamentos
 (mês de referência e data do recebimento) → Despesas. Em **Relatórios** escolha o mês e exporte PDF ou Excel:
 o relatório lista os valores *recebidos no mês* (pela data do pagamento), as despesas do mês e o saldo a repassar.
 

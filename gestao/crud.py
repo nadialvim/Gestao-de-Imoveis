@@ -20,6 +20,11 @@ def _res(slug):
     return res
 
 
+@bp.route("/apartamentos/")
+def apartamentos_antigo():
+    return redirect(url_for("crud.listar", slug="imoveis"))
+
+
 @bp.route("/<slug>/")
 def listar(slug):
     res = _res(slug)
@@ -51,9 +56,13 @@ def listar(slug):
 
 def _valores_iniciais(res, obj):
     if obj is not None and obj.id is not None:
-        return {f.name: f.to_input(getattr(obj, f.name)) for f in res.fields}
+        return {f.name: f.to_input(getattr(obj, f.name, None)) for f in res.fields}
     base = res.new_defaults() if res.new_defaults else {}
-    return {f.name: f.to_input(base.get(f.name, f.default)) for f in res.fields}
+    valores = {f.name: f.to_input(base.get(f.name, f.default)) for f in res.fields}
+    for f in res.fields:  # valores iniciais pela URL (ex.: ?imovel_id=3 no botão Alugar)
+        if f.name in request.args:
+            valores[f.name] = request.args[f.name]
+    return valores
 
 
 def _salvar(res, obj):
@@ -70,7 +79,10 @@ def _salvar(res, obj):
             flash(e, "danger")
         return False
     for f in res.fields:
-        setattr(obj, f.name, dados[f.name])
+        if not f.extra:
+            setattr(obj, f.name, dados[f.name])
+    if res.before_save:
+        res.before_save(obj, dados)
     if obj.id is None:
         db.session.add(obj)
     try:
@@ -130,19 +142,22 @@ def excluir(slug, id):
 def baixar_contrato(id):
     """Dá baixa no aluguel (devolução do imóvel/vaga), liberando-o para nova locação."""
     contrato = db.get_or_404(Contrato, id)
+    voltar = request.form.get("voltar")
+    destino = redirect(url_for("crud.listar",
+                               slug=voltar if voltar in ("imoveis", "vagas") else "contratos"))
     if not contrato.ativo:
         flash("Este contrato já foi encerrado.", "warning")
-        return redirect(url_for("crud.listar", slug="contratos"))
+        return destino
     try:
         data = date.fromisoformat(request.form.get("data_devolucao", ""))
     except ValueError:
         flash("Informe a data de devolução.", "danger")
-        return redirect(url_for("crud.listar", slug="contratos"))
+        return destino
     if data < contrato.data_inicio:
         flash("A devolução não pode ser anterior ao início do contrato.", "danger")
-        return redirect(url_for("crud.listar", slug="contratos"))
+        return destino
     contrato.ativo = False
     contrato.encerrado_em = data
     db.session.commit()
     flash(f"Baixa registrada: {contrato.imovel} está disponível para locação.", "success")
-    return redirect(url_for("crud.listar", slug="contratos"))
+    return destino

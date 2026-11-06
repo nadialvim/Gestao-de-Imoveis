@@ -39,9 +39,14 @@
           <td>{% if c.cor is defined %}<span class="badge badge-soft-{{ c.cor }}">{{ c.texto }}</span>{% else %}{{ c }}{% endif %}</td>
           {% endfor %}
           <td class="text-end text-nowrap">
-            {% if res.slug == 'contratos' and obj.ativo %}
+            {% if res.slug in ('imoveis', 'vagas') and obj.disponivel %}
+            <a class="btn btn-sm btn-success" title="Alugar"
+               href="{{ url_for('crud.novo', slug='contratos', **({'imovel_id': id} if res.slug == 'imoveis' else {'vaga_id': id})) }}"><i class="bi bi-key me-1"></i>Alugar</a>
+            {% endif %}
+            {% set ctr = obj if res.slug == 'contratos' else obj.contrato_ativo %}
+            {% if res.slug in ('contratos', 'imoveis', 'vagas') and ctr and ctr.ativo %}
             <button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#modalBaixa"
-                    data-action="{{ url_for('crud.baixar_contrato', id=id) }}" data-nome="{{ obj }}"
+                    data-action="{{ url_for('crud.baixar_contrato', id=ctr.id) }}" data-nome="{{ ctr }}"
                     title="Dar baixa (devolução do imóvel)"><i class="bi bi-box-arrow-in-left me-1"></i>Dar baixa</button>
             {% endif %}
             <a class="btn btn-sm btn-outline-primary btn-icon" title="Editar"
@@ -63,11 +68,12 @@
   <div class="empty" id="sem-resultado" style="display:none"><i class="bi bi-search"></i>Nada encontrado para a busca.</div>
 </div>
 
-{% if res.slug == 'contratos' %}
+{% if res.slug in ('contratos', 'imoveis', 'vagas') %}
 <div class="modal fade" id="modalBaixa" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <form method="post" class="modal-content" id="formBaixa">
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <input type="hidden" name="voltar" value="{{ res.slug }}">
       <div class="modal-header"><h5 class="modal-title">Dar baixa no aluguel</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button></div>
       <div class="modal-body">

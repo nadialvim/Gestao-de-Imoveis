@@ -25,6 +25,7 @@ class Field:
     choices: Optional[Callable] = None  # select/choice: ([obj]) -> [(valor, rótulo)]
     default: Optional[object] = None
     wide: bool = False  # ocupa a linha inteira no formulário de 2 colunas
+    extra: bool = False  # não é coluna do modelo (só alimenta validate/before_save)
 
     def opcoes(self, obj=None):
         """Opções do select; a função de opções pode receber o objeto em edição."""
@@ -99,6 +100,7 @@ class Resource:
     new_defaults: Optional[Callable] = None  # () -> dict de valores iniciais
     # campos de formulário que não são colunas do modelo (ex.: lista de apartamentos)
     extra_fields: list = field(default_factory=list)
-    after_save: Optional[Callable] = None  # (obj, dados) -> mensagem opcional
+    after_save: Optional[Callable] = None  # (obj, dados) -> mensagem opcional (pós-commit)
+    before_save: Optional[Callable] = None  # (obj, dados) -> None (antes do commit)
     # filtros da listagem: [(coluna, rótulo, [(valor, texto)])] via ?coluna=valor
     filters: list = field(default_factory=list)

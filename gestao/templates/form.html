@@ -9,6 +9,9 @@
   <div class="card-body p-4">
     <form method="post">
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      {% if res.slug == 'contratos' %}
+      <div class="alert alert-info py-2 small"><i class="bi bi-info-circle me-1"></i>O valor mensal é o <strong>valor do aluguel cadastrado no imóvel/vaga</strong> (não é digitado aqui). Para reajustar, altere o valor no imóvel.</div>
+      {% endif %}
       <div class="row g-3">
         {% for f in res.fields + res.extra_fields %}
         {% set v = valores.get(f.name, '') %}

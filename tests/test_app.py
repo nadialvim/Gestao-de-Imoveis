@@ -27,8 +27,9 @@ def client(app):
 @pytest.fixture
 def base(app):
     p = Predio(nome="Ed. Sol")
-    a = Imovel(tipo="apartamento", predio=p, identificacao="101")
-    v = Vaga(predio=p, identificacao="G1")
+    a = Imovel(tipo="apartamento", predio=p, identificacao="101",
+               valor_aluguel_padrao=Decimal("1000"))
+    v = Vaga(predio=p, identificacao="G1", valor_aluguel_padrao=Decimal("250"))
     i = Inquilino(nome="Maria")
     db.session.add_all([p, a, v, i])
     db.session.commit()
@@ -321,3 +322,85 @@ def test_filtro_por_tipo_na_lista(client, base):
     db.session.commit()
     html = client.get("/c/imoveis/?tipo=casa").get_data(as_text=True)
     assert "Casa Azul" in html and "Apto" not in html.split("<tbody>")[1]
+
+
+# ---------- fluxo simplificado de aluguel ----------
+def test_contrato_herda_valor_do_imovel(client, base):
+    _, a, _, i = base
+    r = client.post("/c/contratos/novo", data=_contrato_form(i, imovel_id=a.id,
+                                                              valor_mensal="1"))
+    assert r.status_code == 302
+    assert Contrato.query.one().valor_mensal == Decimal("1000")  # campo valor é ignorado
+
+
+def test_imovel_sem_valor_nao_pode_ser_alugado(client, base):
+    p, a, _, i = base
+    a.valor_aluguel_padrao = None
+    db.session.commit()
+    r = client.post("/c/contratos/novo", data=_contrato_form(i, imovel_id=a.id))
+    assert "Defina o valor do aluguel".encode() in r.data
+    assert Contrato.query.count() == 0
+
+
+def test_reajuste_do_imovel_atualiza_contrato_ativo_e_nao_encerrados(client, base):
+    p, a, _, i = base
+    client.post("/c/contratos/novo", data=_contrato_form(i, imovel_id=a.id))
+    c = Contrato.query.one()
+    client.post(f"/c/imoveis/{a.id}/editar", data={
+        "tipo": "apartamento", "predio_id": p.id, "identificacao": "101",
+        "valor_aluguel_padrao": "1200"})
+    db.session.refresh(c)
+    assert c.valor_mensal == Decimal("1200")
+    client.post(f"/c/contratos/{c.id}/baixa", data={"data_devolucao": "2026-06-01"})
+    client.post(f"/c/imoveis/{a.id}/editar", data={
+        "tipo": "apartamento", "predio_id": p.id, "identificacao": "101",
+        "valor_aluguel_padrao": "1500"})
+    db.session.refresh(c)
+    assert c.valor_mensal == Decimal("1200")  # histórico preservado
+
+
+def test_alugar_com_inquilino_novo_na_mesma_tela(client, base):
+    _, a, _, _ = base
+    r = client.post("/c/contratos/novo", data={
+        "novo_inquilino_nome": "Carlos Lima", "novo_inquilino_telefone": "9999",
+        "imovel_id": a.id, "data_inicio": "2026-02-01", "data_fim": "2027-01-31",
+        "dia_vencimento": "10"})
+    assert r.status_code == 302
+    c = Contrato.query.one()
+    assert c.inquilino.nome == "Carlos Lima" and c.inquilino.telefone == "9999"
+    r = client.post("/c/contratos/novo", data={
+        "imovel_id": a.id, "data_inicio": "2026-02-01", "data_fim": "2027-01-31",
+        "dia_vencimento": "10"})
+    assert "Escolha um inquilino".encode() in r.data
+    assert Inquilino.query.filter_by(nome="Carlos Lima").count() == 1
+
+
+def test_botao_alugar_preenche_formulario_e_baixa_volta_para_imoveis(client, base):
+    _, a, _, i = base
+    html = client.get("/c/imoveis/").get_data(as_text=True)
+    assert f"/c/contratos/novo?imovel_id={a.id}" in html
+    form = client.get(f"/c/contratos/novo?imovel_id={a.id}").get_data(as_text=True)
+    assert f'<option value="{a.id}" selected>' in form
+    client.post("/c/contratos/novo", data=_contrato_form(i, imovel_id=a.id))
+    c = Contrato.query.one()
+    html = client.get("/c/imoveis/").get_data(as_text=True)
+    assert "Dar baixa" in html and "Alugar" not in html.split("<tbody>")[1]
+    r = client.post(f"/c/contratos/{c.id}/baixa",
+                    data={"data_devolucao": "2026-04-01", "voltar": "imoveis"})
+    assert r.headers["Location"].endswith("/c/imoveis/")
+
+
+def test_apartamentos_antigo_redireciona(client):
+    r = client.get("/c/apartamentos/")
+    assert r.status_code == 302 and r.headers["Location"].endswith("/c/imoveis/")
+
+
+def test_predio_em_lote_com_aluguel(client):
+    client.post("/c/predios/novo", data={
+        "nome": "Ed. Mar", "apartamentos_novos": "11, 12", "aluguel_apartamentos": "900",
+        "lojas_novas": "L1", "aluguel_lojas": "2500"})
+    valores = {(i.tipo, i.identificacao): i.valor_aluguel_padrao for i in Imovel.query.all()
+               if i.predio and i.predio.nome == "Ed. Mar"}
+    assert valores == {("apartamento", "11"): Decimal("900"),
+                       ("apartamento", "12"): Decimal("900"),
+                       ("loja", "L1"): Decimal("2500")}

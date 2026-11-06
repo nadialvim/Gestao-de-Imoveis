@@ -16,6 +16,11 @@ def opcoes_tipos_imovel():
     return Imovel.TIPOS
 
 
+def _com_valor(obj):
+    valor = brl(obj.valor_aluguel_padrao) if obj.valor_aluguel_padrao else "sem valor definido"
+    return f"{obj} — {valor}"
+
+
 def _ordenar(itens):
     return sorted(itens, key=lambda x: x[1])
 
@@ -23,13 +28,13 @@ def _ordenar(itens):
 def opcoes_imoveis(obj=None):
     """Imóveis disponíveis (mais o do próprio contrato, ao editar)."""
     atual = getattr(obj, "imovel_id", None)
-    return _ordenar((i.id, str(i)) for i in Imovel.query.all()
+    return _ordenar((i.id, _com_valor(i)) for i in Imovel.query.all()
                     if i.disponivel or i.id == atual)
 
 
 def opcoes_vagas(obj=None):
     atual = getattr(obj, "vaga_id", None)
-    return _ordenar((v.id, str(v)) for v in Vaga.query.all()
+    return _ordenar((v.id, _com_valor(v)) for v in Vaga.query.all()
                     if v.disponivel or v.id == atual)
 
 
@@ -61,7 +66,14 @@ def validar_contrato(d, obj):
         erros.append("A data final não pode ser anterior à inicial.")
     if not 1 <= d["dia_vencimento"] <= 31:
         erros.append("Dia de vencimento deve estar entre 1 e 31.")
+    if not d["inquilino_id"] and not d["novo_inquilino_nome"]:
+        erros.append("Escolha um inquilino ou informe o nome de um novo.")
     ativo = obj is None or obj.ativo is not False  # contrato encerrado não bloqueia
+    if not erros and ativo:
+        alvo = (db.session.get(Imovel, d["imovel_id"]) if d["imovel_id"]
+                else db.session.get(Vaga, d["vaga_id"]))
+        if alvo is None or not alvo.valor_aluguel_padrao:
+            erros.append("Defina o valor do aluguel no cadastro do imóvel/vaga antes de alugar.")
     if not erros and ativo:
         q = Contrato.query.filter(Contrato.ativo.is_(True))
         if d["imovel_id"]:
@@ -75,6 +87,30 @@ def validar_contrato(d, obj):
             erros.append(f"Já está alugado ({outro.inquilino.nome}). "
                          "Dê baixa no contrato atual antes de alugar novamente.")
     return erros
+
+
+def preparar_contrato(obj, d):
+    """Cria o inquilino novo (se informado) e fixa o valor mensal pelo imóvel/vaga."""
+    if not d["inquilino_id"]:
+        inq = Inquilino(nome=d["novo_inquilino_nome"],
+                        telefone=d["novo_inquilino_telefone"])
+        db.session.add(inq)
+        db.session.flush()
+        obj.inquilino_id = inq.id
+    if obj.ativo is not False:
+        alvo = (db.session.get(Imovel, d["imovel_id"]) if d["imovel_id"]
+                else db.session.get(Vaga, d["vaga_id"]))
+        obj.valor_mensal = alvo.valor_aluguel_padrao
+
+
+def propagar_valor(obj, dados):
+    """Reajuste: o contrato ativo acompanha o valor do imóvel/vaga."""
+    contrato = obj.contrato_ativo
+    if contrato and obj.valor_aluguel_padrao and contrato.valor_mensal != obj.valor_aluguel_padrao:
+        contrato.valor_mensal = obj.valor_aluguel_padrao
+        db.session.commit()
+        return f"Contrato ativo de {contrato.inquilino.nome} atualizado para o novo valor."
+    return None
 
 
 def validar_imovel(d, obj):
@@ -103,7 +139,10 @@ def criar_unidades(predio, dados):
         for ident in dados.get(campo) or []:
             if (tipo, ident) in existentes:
                 continue
-            db.session.add(Imovel(tipo=tipo, predio=predio, identificacao=ident))
+            db.session.add(Imovel(tipo=tipo, predio=predio, identificacao=ident,
+                                  valor_aluguel_padrao=dados.get(
+                                      "aluguel_apartamentos" if tipo == "apartamento"
+                                      else "aluguel_lojas")))
             existentes.add((tipo, ident))
             criados[tipo] += 1
     if not any(criados.values()):
@@ -128,7 +167,11 @@ RESOURCES = {r.slug: r for r in [
         extra_fields=[
             Field("apartamentos_novos", "Apartamentos do prédio", "lista", required=False,
                   wide=True),
-            Field("lojas_novas", "Lojas do prédio", "lista", required=False, wide=True)],
+            Field("aluguel_apartamentos", "Aluguel dos apartamentos novos (R$)", "money",
+                  required=False),
+            Field("lojas_novas", "Lojas do prédio", "lista", required=False, wide=True),
+            Field("aluguel_lojas", "Aluguel das lojas novas (R$)", "money",
+                  required=False)],
         columns=[("Nome", lambda o: o.nome), ("Endereço", lambda o: o.endereco or ""),
                  ("Apartamentos", lambda o: sum(i.tipo == "apartamento" for i in o.imoveis)),
                  ("Lojas", lambda o: sum(i.tipo == "loja" for i in o.imoveis))],
@@ -142,17 +185,18 @@ RESOURCES = {r.slug: r for r in [
                 Field("predio_id", "Prédio (não se aplica a casa)", "select",
                       required=False, choices=opcoes_predios),
                 Field("identificacao", "Identificação (nº do apto, loja ou nome da casa)"),
-                Field("valor_aluguel_padrao", "Aluguel padrão (R$)", "money",
+                Field("valor_aluguel_padrao", "Valor do aluguel (R$)", "money",
                       required=False),
                 Field("descricao", "Descrição", required=False, wide=True)],
         columns=[("Tipo", lambda o: o.tipo_nome),
                  ("Prédio", lambda o: o.predio.nome if o.predio else "—"),
                  ("Identificação", lambda o: o.identificacao),
-                 ("Aluguel padrão", lambda o: brl(o.valor_aluguel_padrao)),
+                 ("Aluguel", lambda o: brl(o.valor_aluguel_padrao)),
                  ("Situação", situacao),
                  ("Inquilino atual", inquilino_atual)],
         order=lambda: [Imovel.predio_id, Imovel.tipo, Imovel.identificacao],
         validate=validar_imovel,
+        after_save=propagar_valor,
         filters=[("tipo", "Tipo", Imovel.TIPOS)],
     ),
     Resource(
@@ -160,14 +204,15 @@ RESOURCES = {r.slug: r for r in [
         fields=[Field("predio_id", "Prédio", "select", required=False,
                       choices=opcoes_predios),
                 Field("identificacao", "Identificação (ex.: 12, G2-05)"),
-                Field("valor_aluguel_padrao", "Aluguel padrão (R$)", "money",
+                Field("valor_aluguel_padrao", "Valor do aluguel (R$)", "money",
                       required=False)],
         columns=[("Prédio", lambda o: o.predio.nome if o.predio else ""),
                  ("Vaga", lambda o: o.identificacao),
-                 ("Aluguel padrão", lambda o: brl(o.valor_aluguel_padrao)),
+                 ("Aluguel", lambda o: brl(o.valor_aluguel_padrao)),
                  ("Situação", situacao),
                  ("Inquilino atual", inquilino_atual)],
         order=lambda: [Vaga.identificacao],
+        after_save=propagar_valor,
     ),
     Resource(
         "inquilinos", Inquilino, "Inquilino", "Inquilinos",
@@ -181,14 +226,18 @@ RESOURCES = {r.slug: r for r in [
     ),
     Resource(
         "contratos", Contrato, "Contrato", "Contratos",
-        fields=[Field("inquilino_id", "Inquilino", "select", choices=opcoes_inquilinos),
+        fields=[Field("inquilino_id", "Inquilino", "select", required=False,
+                      choices=opcoes_inquilinos),
+                Field("novo_inquilino_nome", "Ou cadastre um novo inquilino: nome",
+                      required=False, extra=True),
+                Field("novo_inquilino_telefone", "Telefone do novo inquilino",
+                      required=False, extra=True),
                 Field("imovel_id", "Imóvel (apto, casa ou loja)", "select", required=False,
                       choices=opcoes_imoveis),
                 Field("vaga_id", "Vaga de garagem", "select", required=False,
                       choices=opcoes_vagas),
                 Field("data_inicio", "Início do contrato", "date"),
                 Field("data_fim", "Fim do contrato", "date"),
-                Field("valor_mensal", "Valor mensal (R$)", "money"),
                 Field("dia_vencimento", "Dia de vencimento", "int", default=5)],
         columns=[("Inquilino", lambda o: o.inquilino.nome),
                  ("Imóvel", lambda o: str(o.imovel)),
@@ -199,6 +248,7 @@ RESOURCES = {r.slug: r for r in [
                              else "Encerrado", "secondary"))],
         order=lambda: [Contrato.ativo.desc(), Contrato.data_inicio.desc()],
         validate=validar_contrato,
+        before_save=preparar_contrato,
     ),
     Resource(
         "pagamentos", Pagamento, "Pagamento", "Pagamentos recebidos",
