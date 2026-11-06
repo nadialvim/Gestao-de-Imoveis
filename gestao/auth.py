@@ -35,7 +35,26 @@ def _autenticar(email, senha):
         return None
     if resp.status_code == 200:
         return resp.json().get("user", {}).get("email", email)
-    flash("E-mail ou senha inválidos.", "danger")
+
+    try:
+        corpo = resp.json()
+    except ValueError:
+        corpo = {}
+    codigo = corpo.get("error_code") or corpo.get("code") or ""
+    texto = str(corpo.get("msg") or corpo.get("message")
+                or corpo.get("error_description") or "")
+    current_app.logger.warning("Login recusado pelo Supabase: status=%s codigo=%s msg=%s",
+                               resp.status_code, codigo, texto)
+
+    if codigo == "email_not_confirmed":
+        flash("E-mail ainda não confirmado no Supabase (Authentication > Users).", "danger")
+    elif "api key" in texto.lower() or codigo in ("invalid_api_key", "no_api_key"):
+        flash("Chave do Supabase inválida: confira SUPABASE_PUBLISHABLE_KEY e SUPABASE_URL "
+              "(devem ser do mesmo projeto).", "danger")
+    elif resp.status_code >= 500 or resp.status_code == 404:
+        flash("Serviço de login indisponível ou SUPABASE_URL incorreta.", "danger")
+    else:
+        flash("E-mail ou senha inválidos.", "danger")
     return None
 
 

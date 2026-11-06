@@ -137,3 +137,35 @@ def test_normalizar_db_url():
     u = "postgres://u:p@h:6543/postgres?sslmode=require&supa=base-pooler.x"
     assert normalizar_db_url(u) == "postgresql://u:p@h:6543/postgres?sslmode=require"
     assert normalizar_db_url("sqlite:///local.db") == "sqlite:///local.db"
+
+
+class _Resp:
+    def __init__(self, status, body):
+        self.status_code, self._body = status, body
+
+    def json(self):
+        return self._body
+
+
+@pytest.mark.parametrize("status,body,esperado", [
+    (400, {"error_code": "email_not_confirmed", "msg": "Email not confirmed"}, "não confirmado"),
+    (401, {"message": "Invalid API key"}, "Chave do Supabase inválida"),
+    (400, {"error_code": "invalid_credentials", "msg": "Invalid login credentials"},
+     "E-mail ou senha inválidos"),
+    (404, {}, "SUPABASE_URL incorreta"),
+])
+def test_login_mensagens(monkeypatch, status, body, esperado):
+    app = create_app({"TESTING": True, "SQLALCHEMY_DATABASE_URI": "sqlite://",
+                      "SUPABASE_URL": "https://x.supabase.co", "SUPABASE_ANON_KEY": "k"})
+    monkeypatch.setattr("gestao.auth.requests.post", lambda *a, **k: _Resp(status, body))
+    r = app.test_client().post("/login", data={"email": "a@b.c", "senha": "x"})
+    assert esperado in r.get_data(as_text=True)
+
+
+def test_login_ok(monkeypatch):
+    app = create_app({"TESTING": True, "SQLALCHEMY_DATABASE_URI": "sqlite://",
+                      "SUPABASE_URL": "https://x.supabase.co", "SUPABASE_ANON_KEY": "k"})
+    monkeypatch.setattr("gestao.auth.requests.post",
+                        lambda *a, **k: _Resp(200, {"user": {"email": "a@b.c"}}))
+    r = app.test_client().post("/login", data={"email": "a@b.c", "senha": "x"})
+    assert r.status_code == 302
