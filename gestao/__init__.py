@@ -1,10 +1,23 @@
 import os
 import secrets
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from flask import Flask, abort, request, session
 from sqlalchemy.pool import NullPool
 
 from .extensions import db
+
+
+def normalizar_db_url(uri):
+    """Ajusta a URL do Postgres: esquema 'postgresql://' e remove parâmetros
+    que o psycopg2 não aceita (ex.: 'supa=...' da integração Supabase/Vercel)."""
+    if uri.startswith("postgres://"):
+        uri = uri.replace("postgres://", "postgresql://", 1)
+    partes = urlsplit(uri)
+    if partes.query:
+        query = [(k, v) for k, v in parse_qsl(partes.query) if k != "supa"]
+        uri = urlunsplit(partes._replace(query=urlencode(query)))
+    return uri
 
 
 def create_app(config=None):
@@ -16,15 +29,16 @@ def create_app(config=None):
         pass
 
     app = Flask(__name__)
-    uri = os.environ.get("DATABASE_URL", "sqlite:///local.db")
-    if uri.startswith("postgres://"):
-        uri = uri.replace("postgres://", "postgresql://", 1)
+    uri = (os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
+           or "sqlite:///local.db")
+    uri = normalizar_db_url(uri)
 
     app.config.update(
         SECRET_KEY=os.environ.get("SECRET_KEY", "dev-insecure"),
         SQLALCHEMY_DATABASE_URI=uri,
         SUPABASE_URL=os.environ.get("SUPABASE_URL", ""),
-        SUPABASE_ANON_KEY=os.environ.get("SUPABASE_ANON_KEY", ""),
+        SUPABASE_ANON_KEY=(os.environ.get("SUPABASE_ANON_KEY")
+                           or os.environ.get("SUPABASE_PUBLISHABLE_KEY", "")),
         PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 7,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",

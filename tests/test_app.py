@@ -129,3 +129,11 @@ def test_excluir_com_vinculo(client, base):
     r = client.post(f"/c/predios/{p.id}/excluir")
     assert r.status_code == 302
     assert Predio.query.count() == 1
+
+
+def test_normalizar_db_url():
+    from gestao import normalizar_db_url
+
+    u = "postgres://u:p@h:6543/postgres?sslmode=require&supa=base-pooler.x"
+    assert normalizar_db_url(u) == "postgresql://u:p@h:6543/postgres?sslmode=require"
+    assert normalizar_db_url("sqlite:///local.db") == "sqlite:///local.db"

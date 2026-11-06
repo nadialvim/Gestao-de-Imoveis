@@ -20,7 +20,7 @@ pytest                                              # testes (SQLite em memória
    - Copie a *Connection string* do **Transaction pooler** (porta 6543) e, em *Settings > API*, a URL e a `anon key`.
 2. **GitHub**: crie um repositório e envie o código (`git remote add origin ...; git push -u origin main`).
 3. **Vercel**: *Add New > Project*, importe o repositório e configure as variáveis de ambiente:
-   `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SECRET_KEY` (valor aleatório longo).
+   `DATABASE_URL` (ou `POSTGRES_URL`, da integração Supabase), `SUPABASE_URL`, `SUPABASE_ANON_KEY` (ou `SUPABASE_PUBLISHABLE_KEY`) e `SECRET_KEY` (valor aleatório longo, obrigatório). Não use a `SUPABASE_SECRET_KEY`.
 4. Acesse a URL gerada e entre com um usuário do Supabase.
 
 ## Como usar
