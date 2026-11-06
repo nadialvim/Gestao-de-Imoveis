@@ -1,11 +1,13 @@
 from datetime import date
+from decimal import Decimal
 
-from flask import (Blueprint, abort, flash, redirect, render_template, request,
-                   url_for)
+from flask import (Blueprint, abort, flash, jsonify, redirect, render_template,
+                   request, url_for)
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 
 from .extensions import db
-from .models import Contrato
+from .models import Contrato, Pagamento
 from .services.periodo import intervalo_mes, parse_mes
 
 bp = Blueprint("crud", __name__, url_prefix="/c")
@@ -23,6 +25,22 @@ def _res(slug):
 @bp.route("/apartamentos/")
 def apartamentos_antigo():
     return redirect(url_for("crud.listar", slug="imoveis"))
+
+
+@bp.route("/pagamentos/sugestao")
+def sugestao_pagamento():
+    """Valor do contrato, já recebido e faltante no mês (para pré-preencher o pagamento)."""
+    contrato = db.session.get(Contrato, request.args.get("contrato_id", 0, type=int))
+    if contrato is None:
+        return jsonify({}), 404
+    ano, mes = parse_mes(request.args.get("competencia"))
+    recebido = db.session.query(func.coalesce(func.sum(Pagamento.valor_pago), 0)).filter(
+        Pagamento.contrato_id == contrato.id,
+        Pagamento.competencia == date(ano, mes, 1)).scalar()
+    valor = Decimal(str(contrato.valor_mensal))
+    recebido = Decimal(str(recebido))
+    return jsonify(valor_mensal=f"{valor:.2f}", recebido=f"{recebido:.2f}",
+                   falta=f"{max(Decimal('0'), valor - recebido):.2f}")
 
 
 @bp.route("/<slug>/")

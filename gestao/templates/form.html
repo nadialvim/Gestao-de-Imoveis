@@ -7,7 +7,7 @@
 {% block content %}
 <div class="card" style="max-width: 880px;">
   <div class="card-body p-4">
-    <form method="post">
+    <form method="post" {% if res.slug == 'pagamentos' and not obj.id %}data-sugestao="{{ url_for('crud.sugestao_pagamento') }}"{% endif %}>
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
       {% if res.slug == 'contratos' %}
       <div class="alert alert-info py-2 small"><i class="bi bi-info-circle me-1"></i>O valor mensal é o <strong>valor do aluguel cadastrado no imóvel/vaga</strong> (não é digitado aqui). Para reajustar, altere o valor no imóvel.</div>
@@ -41,6 +41,7 @@
             <input class="form-control" type="number" step="0.01" min="0" inputmode="decimal"
                    id="{{ f.name }}" name="{{ f.name }}" value="{{ v }}" {% if f.required %}required{% endif %}>
           </div>
+          {% if res.slug == 'pagamentos' and f.name == 'valor_pago' %}<div id="dica-valor" class="form-text"></div>{% endif %}
           {% elif f.kind in ('date', 'month') %}
           <input class="form-control" type="{{ f.kind }}" id="{{ f.name }}" name="{{ f.name }}"
                  value="{{ v }}" {% if f.required %}required{% endif %}>

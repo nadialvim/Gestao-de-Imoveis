@@ -15,6 +15,31 @@
     });
   }
 
+  // Pagamento: pré-preenche o valor recebido ao escolher contrato/mês
+  var formPag = document.querySelector("form[data-sugestao]");
+  if (formPag) {
+    var selC = document.getElementById("contrato_id"), inMes = document.getElementById("competencia");
+    var inVal = document.getElementById("valor_pago"), dica = document.getElementById("dica-valor");
+    var fmt = function (v) { return parseFloat(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); };
+    var atualizar = function () {
+      if (!selC.value || !inMes.value) { if (dica) dica.textContent = ""; return; }
+      fetch(formPag.getAttribute("data-sugestao") + "?contrato_id=" + encodeURIComponent(selC.value) +
+            "&competencia=" + encodeURIComponent(inMes.value), { credentials: "same-origin" })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) {
+          if (!d) return;
+          if (parseFloat(d.falta) > 0) { inVal.value = d.falta; }
+          if (dica) {
+            dica.textContent = "Contrato " + fmt(d.valor_mensal) + " · já recebido no mês " + fmt(d.recebido) +
+              (parseFloat(d.falta) > 0 ? " · falta " + fmt(d.falta) : " · mês já quitado");
+          }
+        });
+    };
+    selC.addEventListener("change", atualizar);
+    inMes.addEventListener("change", atualizar);
+    if (selC.value) { atualizar(); }
+  }
+
   // Busca nas tabelas
   var input = document.getElementById("busca");
   if (input) {

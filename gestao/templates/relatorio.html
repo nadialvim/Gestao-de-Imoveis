@@ -16,17 +16,18 @@
   <div class="card-header"><i class="bi bi-arrow-down-circle me-1"></i>Recebimentos</div>
   <div class="table-responsive">
     <table class="table align-middle">
-      <thead><tr><th>Data</th><th>Referência</th><th>Inquilino</th><th>Imóvel</th><th class="text-end">Valor</th></tr></thead>
+      <thead><tr><th>Data</th><th>Referência</th><th>Inquilino</th><th>Imóvel</th><th>Recebido por</th><th class="text-end">Valor</th></tr></thead>
       <tbody>
         {% for p in d.pagamentos %}
         <tr><td>{{ p.data_pagamento|data_br }}</td><td>{{ p.competencia|mes_br }}</td>
             <td>{{ p.contrato.inquilino.nome }}</td><td>{{ p.contrato.imovel }}</td>
+            <td>{{ p.recebido_por or '' }}</td>
             <td class="text-end text-money">{{ p.valor_pago|brl }}</td></tr>
         {% else %}
-        <tr><td colspan="5"><div class="empty py-3">Nenhum recebimento no mês.</div></td></tr>
+        <tr><td colspan="6"><div class="empty py-3">Nenhum recebimento no mês.</div></td></tr>
         {% endfor %}
       </tbody>
-      <tfoot><tr class="fw-bold"><td colspan="4" class="text-end">Total</td><td class="text-end text-money">{{ d.total_recebido|brl }}</td></tr></tfoot>
+      <tfoot><tr class="fw-bold"><td colspan="5" class="text-end">Total</td><td class="text-end text-money">{{ d.total_recebido|brl }}</td></tr></tfoot>
     </table>
   </div>
 </div>

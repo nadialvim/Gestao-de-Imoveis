@@ -32,3 +32,10 @@ o relatório lista os valores *recebidos no mês* (pela data do pagamento), as d
 Se o banco foi criado com a versão anterior (tabela `apartamentos`), rode **uma vez** o conteúdo de
 `db/migrations/002_imoveis.sql` no SQL Editor do Supabase, antes de usar o site atualizado. Bancos novos usam
 apenas `db/schema.sql`.
+
+Pagamentos: ao escolher o contrato e o mês, o valor recebido vem preenchido com o que falta (editável); informe a
+forma (Pix, Dinheiro, Transferência) e quem recebeu (Sergio/Fagner). A lista mostra a coluna **Faltante** em
+pagamentos parciais (complementos do mesmo mês de referência são abatidos). O menu **Em débito** lista os
+inquilinos com meses vencidos e não pagos desde o início do contrato.
+
+Se o banco já existia antes desta versão, rode também `db/migrations/003_recebido_por.sql` (uma vez).

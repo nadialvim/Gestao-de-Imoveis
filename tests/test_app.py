@@ -105,9 +105,10 @@ def test_contrato_vaga_ok_e_pagamento(client, base):
     c = Contrato.query.one()
     r = client.post("/c/pagamentos/novo", data={
         "contrato_id": c.id, "competencia": "2026-02", "data_pagamento": "2026-02-08",
-        "valor_pago": "250.00"})
+        "valor_pago": "250.00", "forma_pagamento": "Pix", "recebido_por": "Sergio"})
     assert r.status_code == 302
-    assert Pagamento.query.one().competencia == date(2026, 2, 1)
+    pg = Pagamento.query.one()
+    assert pg.competencia == date(2026, 2, 1) and pg.recebido_por == "Sergio"
 
 
 def test_paginas_e_exportacao_http(client, base):
@@ -404,3 +405,85 @@ def test_predio_em_lote_com_aluguel(client):
     assert valores == {("apartamento", "11"): Decimal("900"),
                        ("apartamento", "12"): Decimal("900"),
                        ("loja", "L1"): Decimal("2500")}
+
+
+# ---------- pagamentos: sugestão, combos, faltante, débitos ----------
+def _pagto(contrato_id, valor, data="2026-03-05", comp="2026-03", forma="Pix", quem="Fagner"):
+    return {"contrato_id": contrato_id, "competencia": comp, "data_pagamento": data,
+            "valor_pago": valor, "forma_pagamento": forma, "recebido_por": quem}
+
+
+def test_forma_e_recebedor_sao_combos_obrigatorios(client, base):
+    _, a, _, i = base
+    c = novo_contrato(i, a=a)
+    html = client.get("/c/pagamentos/novo").get_data(as_text=True)
+    for txt in ("Pix", "Dinheiro", "Transferência bancária (TED/DOC)", "Sergio", "Fagner",
+                'id="dica-valor"', "data-sugestao"):
+        assert txt in html
+    r = client.post("/c/pagamentos/novo", data=_pagto(c.id, "1000", forma="Cheque"))
+    assert "opção inválida" in r.get_data(as_text=True)
+    r = client.post("/c/pagamentos/novo", data=_pagto(c.id, "1000", quem="Outro"))
+    assert "opção inválida" in r.get_data(as_text=True)
+    assert Pagamento.query.count() == 0
+
+
+def test_sugestao_de_valor_e_faltante_abatido(client, base):
+    _, a, _, i = base
+    c = novo_contrato(i, a=a)   # valor_mensal 1000
+    j = client.get(f"/c/pagamentos/sugestao?contrato_id={c.id}&competencia=2026-03").get_json()
+    assert j == {"valor_mensal": "1000.00", "recebido": "0.00", "falta": "1000.00"}
+    client.post("/c/pagamentos/novo", data=_pagto(c.id, "600"))
+    j = client.get(f"/c/pagamentos/sugestao?contrato_id={c.id}&competencia=2026-03").get_json()
+    assert j["recebido"] == "600.00" and j["falta"] == "400.00"
+    client.post("/c/pagamentos/novo", data=_pagto(c.id, "400", data="2026-03-20"))
+    p1, p2 = Pagamento.query.order_by(Pagamento.id).all()
+    assert p1.faltante == Decimal("400") and p2.faltante == Decimal("0")
+    html = client.get("/c/pagamentos/?mes=2026-03").get_data(as_text=True)
+    assert "Recebido por" in html and "Faltante" in html and "Quitado" in html
+    assert "R$ 400,00" in html
+    assert client.get("/c/pagamentos/sugestao?contrato_id=999").status_code == 404
+
+
+def test_debitos_por_inquilino(base):
+    _, a, v, i = base
+    c = novo_contrato(i, a=a, inicio=date(2026, 1, 1), fim=date(2026, 12, 31))  # R$ 1000, venc. dia 5
+    db.session.add(Pagamento(contrato=c, competencia=date(2026, 1, 1),
+                             data_pagamento=date(2026, 1, 5), valor_pago=Decimal("1000")))
+    db.session.add(Pagamento(contrato=c, competencia=date(2026, 2, 1),
+                             data_pagamento=date(2026, 2, 5), valor_pago=Decimal("600")))
+    db.session.commit()
+    d = relatorio.debitos(hoje=date(2026, 4, 10))
+    assert len(d["inquilinos"]) == 1
+    item = d["inquilinos"][0]
+    # fev: faltam 400; mar e abr (venc. dia 5 já passou): 1000 cada
+    assert [m["competencia"] for m in item["meses"]] == [date(2026, 2, 1), date(2026, 3, 1),
+                                                          date(2026, 4, 1)]
+    assert item["total"] == Decimal("2400") and d["total"] == Decimal("2400")
+    assert item["meses"][0]["dias_atraso"] == (date(2026, 4, 10) - date(2026, 2, 5)).days
+    # antes do vencimento do mês corrente não conta
+    assert relatorio.debitos(hoje=date(2026, 4, 5))["total"] == Decimal("1400")
+
+
+def test_debitos_contrato_encerrado_e_quitado(base):
+    _, a, _, i = base
+    c = novo_contrato(i, a=a, inicio=date(2026, 1, 1), fim=date(2026, 12, 31))
+    for m in (1, 2):
+        db.session.add(Pagamento(contrato=c, competencia=date(2026, m, 1),
+                                 data_pagamento=date(2026, m, 5), valor_pago=Decimal("1000")))
+    c.ativo, c.encerrado_em = False, date(2026, 2, 28)
+    db.session.commit()
+    assert relatorio.debitos(hoje=date(2026, 9, 1))["inquilinos"] == []  # nada após a baixa
+
+
+def test_pagina_debitos_e_exportacoes_com_recebido_por(client, base):
+    _, a, _, i = base
+    c = novo_contrato(i, a=a, inicio=date(2025, 1, 1), fim=date(2025, 12, 31))
+    db.session.add(Pagamento(contrato=c, competencia=date(2026, 3, 1),
+                             data_pagamento=date(2026, 3, 5), valor_pago=Decimal("1000"),
+                             forma_pagamento="Pix", recebido_por="Sergio"))
+    db.session.commit()
+    html = client.get("/relatorios/debitos").get_data(as_text=True)
+    assert "Inquilinos em débito" in html and "Maria" in html
+    assert "Sergio" in client.get("/relatorios/?mes=2026-03").get_data(as_text=True)
+    d = relatorio.dados_mes(2026, 3)
+    assert relatorio.gerar_pdf(d).startswith(b"%PDF") and relatorio.gerar_xlsx(d)[:2] == b"PK"

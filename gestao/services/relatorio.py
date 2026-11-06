@@ -1,4 +1,6 @@
+import calendar
 import io
+from collections import defaultdict
 from datetime import date
 from decimal import Decimal
 
@@ -85,6 +87,45 @@ def serie_meses(ano, mes, n=6):
     return saida
 
 
+def debitos(hoje=None):
+    """Inquilinos com valores vencidos e não pagos (todos os meses desde o início do contrato).
+
+    Um mês só conta depois do dia de vencimento; meses cujo vencimento é anterior ao início
+    do contrato não são cobrados. Usa o valor mensal atual do contrato.
+    """
+    hoje = hoje or date.today()
+    pagos = defaultdict(Decimal)
+    for cid, comp, total in (db.session.query(Pagamento.contrato_id, Pagamento.competencia,
+                                              func.sum(Pagamento.valor_pago))
+                             .group_by(Pagamento.contrato_id, Pagamento.competencia)):
+        pagos[(cid, comp)] = Decimal(str(total))
+
+    por_inquilino = {}
+    for c in Contrato.query.all():
+        limite = min(hoje, c.encerrado_em or c.data_fim)
+        a, m = c.data_inicio.year, c.data_inicio.month
+        while (a, m) <= (limite.year, limite.month):
+            venc = date(a, m, min(c.dia_vencimento, calendar.monthrange(a, m)[1]))
+            if c.data_inicio <= venc < hoje:
+                devido = Decimal(str(c.valor_mensal))
+                falta = devido - pagos.get((c.id, date(a, m, 1)), Decimal("0"))
+                if falta > 0:
+                    item = por_inquilino.setdefault(c.inquilino_id, {
+                        "inquilino": c.inquilino, "total": Decimal("0"), "meses": []})
+                    item["total"] += falta
+                    item["meses"].append({
+                        "contrato": c, "competencia": date(a, m, 1), "vencimento": venc,
+                        "devido": devido, "em_aberto": falta,
+                        "dias_atraso": (hoje - venc).days})
+            a, m = (a + 1, 1) if m == 12 else (a, m + 1)
+
+    lista = sorted(por_inquilino.values(), key=lambda x: (-x["total"], x["inquilino"].nome))
+    for item in lista:
+        item["meses"].sort(key=lambda x: x["vencimento"])
+    return {"hoje": hoje, "inquilinos": lista,
+            "total": sum((i["total"] for i in lista), Decimal("0"))}
+
+
 def gerar_xlsx(d):
     wb = Workbook()
     negrito = Font(bold=True)
@@ -104,11 +145,12 @@ def gerar_xlsx(d):
     ws.column_dimensions["B"].width = 18
 
     wr = wb.create_sheet("Recebimentos")
-    wr.append(["Data", "Referência", "Inquilino", "Imóvel", "Forma", "Valor"])
+    wr.append(["Data", "Referência", "Inquilino", "Imóvel", "Forma", "Recebido por", "Valor"])
     for p in d["pagamentos"]:
         wr.append([p.data_pagamento, mes_br(p.competencia), p.contrato.inquilino.nome,
-                   str(p.contrato.imovel), p.forma_pagamento or "", float(p.valor_pago)])
-    wr.append(["", "", "", "", "Total", float(d["total_recebido"])])
+                   str(p.contrato.imovel), p.forma_pagamento or "", p.recebido_por or "",
+                   float(p.valor_pago)])
+    wr.append(["", "", "", "", "", "Total", float(d["total_recebido"])])
 
     wd = wb.create_sheet("Despesas")
     wd.append(["Data", "Descrição", "Categoria", "Prédio", "Valor"])
@@ -117,7 +159,7 @@ def gerar_xlsx(d):
                    x.predio.nome if x.predio else "", float(x.valor)])
     wd.append(["", "", "", "Total", float(d["total_despesas"])])
 
-    for sheet, money_col, widths in ((wr, 6, (12, 16, 28, 34, 14, 14)),
+    for sheet, money_col, widths in ((wr, 7, (12, 16, 28, 34, 30, 14, 14)),
                                      (wd, 5, (12, 40, 20, 24, 14))):
         for cell in sheet[1]:
             cell.font = negrito
@@ -172,12 +214,13 @@ def gerar_pdf(d):
     elementos += [resumo, Spacer(1, 14), Paragraph("Recebimentos", estilos["Heading2"])]
 
     linhas = [[data_br(p.data_pagamento), mes_br(p.competencia),
-               p.contrato.inquilino.nome, str(p.contrato.imovel), brl(p.valor_pago)]
+               p.contrato.inquilino.nome, str(p.contrato.imovel), p.recebido_por or "",
+               brl(p.valor_pago)]
               for p in d["pagamentos"]]
     elementos.append(tabela(
-        ["Data", "Referência", "Inquilino", "Imóvel", "Valor"], linhas,
-        [58, 80, 120, 200, 70],
-        ["", "", "", "Total", brl(d["total_recebido"])]))
+        ["Data", "Referência", "Inquilino", "Imóvel", "Recebido por", "Valor"], linhas,
+        [52, 66, 100, 160, 58, 70],
+        ["", "", "", "", "Total", brl(d["total_recebido"])]))
 
     elementos += [Spacer(1, 14), Paragraph("Despesas", estilos["Heading2"])]
     linhas = [[data_br(x.data), x.descricao, x.categoria or "", brl(x.valor)]

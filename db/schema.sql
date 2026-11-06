@@ -67,6 +67,7 @@ create table if not exists pagamentos (
     data_pagamento date not null,
     valor_pago numeric(12,2) not null,
     forma_pagamento varchar(40),
+    recebido_por varchar(40),
     observacao varchar(255)
 );
 

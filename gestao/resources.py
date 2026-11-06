@@ -3,8 +3,8 @@ from datetime import date
 from .fields import Badge, Field, Resource
 from .formatting import brl, data_br, mes_br
 from .extensions import db
-from .models import (Contrato, Despesa, Imovel, Inquilino, Pagamento, Predio,
-                     Vaga)
+from .models import (FORMAS_PAGAMENTO, RECEBEDORES, Contrato, Despesa, Imovel,
+                     Inquilino, Pagamento, Predio, Vaga)
 
 
 # ---------- opções de selects ----------
@@ -152,6 +152,19 @@ def criar_unidades(predio, dados):
             f"adicionados ao prédio {predio.nome}.")
 
 
+def faltante_badge(pagamento):
+    falta = pagamento.faltante
+    return Badge(brl(falta), "danger") if falta > 0 else Badge("Quitado", "success")
+
+
+def opcoes_formas():
+    return [(f, f) for f in FORMAS_PAGAMENTO]
+
+
+def opcoes_recebedores():
+    return [(r, r) for r in RECEBEDORES]
+
+
 def validar_positivo(campo):
     def _v(d, obj):
         return [] if d[campo] > 0 else ["O valor deve ser maior que zero."]
@@ -256,13 +269,17 @@ RESOURCES = {r.slug: r for r in [
                 Field("competencia", "Mês de referência", "month"),
                 Field("data_pagamento", "Data do pagamento", "date"),
                 Field("valor_pago", "Valor recebido (R$)", "money"),
-                Field("forma_pagamento", "Forma (Pix, dinheiro...)", required=False),
+                Field("forma_pagamento", "Forma de pagamento", "choice",
+                      choices=opcoes_formas),
+                Field("recebido_por", "Recebido por", "choice", choices=opcoes_recebedores),
                 Field("observacao", "Observação", required=False, wide=True)],
         columns=[("Data", lambda o: data_br(o.data_pagamento)),
                  ("Referência", lambda o: mes_br(o.competencia)),
                  ("Contrato", lambda o: str(o.contrato)),
                  ("Valor", lambda o: brl(o.valor_pago)),
-                 ("Forma", lambda o: o.forma_pagamento or "")],
+                 ("Forma", lambda o: o.forma_pagamento or ""),
+                 ("Recebido por", lambda o: o.recebido_por or ""),
+                 ("Faltante", faltante_badge)],
         order=lambda: [Pagamento.data_pagamento.desc(), Pagamento.id.desc()],
         month_field="data_pagamento",
         validate=validar_positivo("valor_pago"),

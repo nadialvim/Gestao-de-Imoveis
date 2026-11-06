@@ -1,4 +1,11 @@
+from decimal import Decimal
+
+from sqlalchemy import and_, func, or_
+
 from .extensions import db
+
+FORMAS_PAGAMENTO = ["Pix", "Dinheiro", "Transferência bancária (TED/DOC)"]
+RECEBEDORES = ["Sergio", "Fagner"]
 
 
 class Predio(db.Model):
@@ -119,8 +126,21 @@ class Pagamento(db.Model):
     data_pagamento = db.Column(db.Date, nullable=False)
     valor_pago = db.Column(db.Numeric(12, 2), nullable=False)
     forma_pagamento = db.Column(db.String(40))
+    recebido_por = db.Column(db.String(40))
     observacao = db.Column(db.String(255))
     contrato = db.relationship("Contrato")
+
+    @property
+    def faltante(self):
+        """Quanto ainda faltava do mês de referência logo após este pagamento
+        (abate os pagamentos anteriores do mesmo contrato e competência)."""
+        total = db.session.query(func.coalesce(func.sum(Pagamento.valor_pago), 0)).filter(
+            Pagamento.contrato_id == self.contrato_id,
+            Pagamento.competencia == self.competencia,
+            or_(Pagamento.data_pagamento < self.data_pagamento,
+                and_(Pagamento.data_pagamento == self.data_pagamento,
+                     Pagamento.id <= self.id))).scalar()
+        return max(Decimal("0"), Decimal(str(self.contrato.valor_mensal)) - Decimal(str(total)))
 
 
 class Despesa(db.Model):

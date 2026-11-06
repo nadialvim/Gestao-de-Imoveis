@@ -34,6 +34,7 @@
     {{ item(url_for('crud.listar', slug='pagamentos'), 'cash-coin', 'Pagamentos', slug == 'pagamentos') }}
     {{ item(url_for('crud.listar', slug='despesas'), 'receipt', 'Despesas', slug == 'despesas') }}
     {{ item(url_for('main.relatorios'), 'bar-chart-line', 'Relatórios', ep in ('main.relatorios',)) }}
+    {{ item(url_for('main.debitos'), 'exclamation-triangle', 'Em débito', ep == 'main.debitos') }}
   </nav>
   <form method="post" action="{{ url_for('auth.logout') }}" class="user-box">
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">

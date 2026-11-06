@@ -20,6 +20,11 @@ def relatorios():
                            mes=f"{ano:04d}-{mes:02d}")
 
 
+@bp.route("/relatorios/debitos")
+def debitos():
+    return render_template("relatorio_debitos.html", d=relatorio.debitos())
+
+
 @bp.route("/relatorios/exportar.<formato>")
 def exportar(formato):
     if formato not in ("pdf", "xlsx"):

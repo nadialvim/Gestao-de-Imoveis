@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Inquilinos em débito{% endblock %}
+{% block heading %}Inquilinos em débito{% endblock %}
+{% block subtitle %}<div class="sub">Valores vencidos e não pagos até {{ d.hoje|data_br }}, desde o início de cada contrato.</div>{% endblock %}
+{% block content %}
+<div class="row g-3 mb-4">
+  <div class="col-12 col-md-6">
+    <div class="card kpi">
+      <div class="icon icon-red"><i class="bi bi-exclamation-triangle"></i></div>
+      <div><div class="label">Total em débito</div><div class="value">{{ d.total|brl }}</div></div>
+    </div>
+  </div>
+  <div class="col-12 col-md-6">
+    <div class="card kpi">
+      <div class="icon icon-blue"><i class="bi bi-people"></i></div>
+      <div><div class="label">Inquilinos devendo</div><div class="value">{{ d.inquilinos|length }}</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <span>Detalhe por mês</span>
+    <div class="search-box">
+      <i class="bi bi-search"></i>
+      <input id="busca" type="search" class="form-control form-control-sm" placeholder="Buscar inquilino ou imóvel..." aria-label="Buscar">
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle" data-busca>
+      <thead><tr><th>Inquilino</th><th>Imóvel</th><th>Referência</th><th>Vencimento</th><th class="text-end">Atraso</th><th class="text-end">Em aberto</th></tr></thead>
+      <tbody>
+        {% for i in d.inquilinos %}
+          {% for m in i.meses %}
+          <tr data-row>
+            <td>{{ i.inquilino.nome }}</td>
+            <td>{{ m.contrato.imovel }}</td>
+            <td>{{ m.competencia|mes_br }}</td>
+            <td>{{ m.vencimento|data_br }}</td>
+            <td class="text-end"><span class="badge badge-soft-danger">{{ m.dias_atraso }} dia(s)</span></td>
+            <td class="text-end text-money">{{ m.em_aberto|brl }}</td>
+          </tr>
+          {% endfor %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if not d.inquilinos %}<div class="empty"><i class="bi bi-check2-circle"></i>Nenhum inquilino em débito.</div>{% endif %}
+  <div class="empty" id="sem-resultado" style="display:none"><i class="bi bi-search"></i>Nada encontrado para a busca.</div>
+  <span id="contador" hidden></span>
+</div>
+
+{% if d.inquilinos %}
+<div class="card mt-4">
+  <div class="card-header"><i class="bi bi-person-lines-fill me-1"></i>Total por inquilino</div>
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead><tr><th>Inquilino</th><th class="text-end">Meses em aberto</th><th class="text-end">Total em débito</th></tr></thead>
+      <tbody>
+        {% for i in d.inquilinos %}
+        <tr><td>{{ i.inquilino.nome }}</td><td class="text-end">{{ i.meses|length }}</td><td class="text-end text-money fw-semibold">{{ i.total|brl }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
