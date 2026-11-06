@@ -139,9 +139,42 @@ body { font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif; f
 .unit { display: block; border-radius: 10px; padding: .6rem .75rem; text-decoration: none; border: 1px solid transparent; line-height: 1.25; }
 .unit .unit-id { display: block; font-weight: 700; font-size: 1rem; }
 .unit .unit-st { display: block; font-size: .72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.unit-livre { background: #e3f6ec; color: #15803d; border-color: #bfe8d0; }
-.unit-alugada { background: #fff4d6; color: #8a5a00; border-color: #f1dc9c; }
 .unit:hover { filter: brightness(.97); transform: translateY(-1px); }
+
+/* ---------- Desenho do prédio e garagem: verde = alugado, amarelo = vago ---------- */
+.unit-livre { background: #fef08a; color: #713f12; border-color: #facc15; }
+.unit-alugada { background: #bbf7d0; color: #14532d; border-color: #4ade80; }
+.icon-amber { background: #fef3c7; color: #a16207; }
+.legenda { display: inline-flex; gap: 1rem; font-size: .82rem; color: var(--muted); font-weight: 500; }
+.legenda .amostra { display: inline-block; width: 14px; height: 14px; border-radius: 4px; margin-right: .35rem;
+  vertical-align: -2px; border: 1px solid transparent; }
+.amostra-alugada { background: #bbf7d0; border-color: #4ade80; }
+.amostra-livre { background: #fef08a; border-color: #facc15; }
+
+.predio-wrap { background: linear-gradient(#eaf4f8, #f6fafb); border-radius: 0 0 12px 12px; padding: 1.5rem 1rem 1.25rem; }
+.predio { max-width: 880px; margin: 0 auto; }
+.predio-telhado { background: #0f3d4c; color: #fff; text-align: center; font-weight: 700; letter-spacing: .3px;
+  padding: .85rem 1rem .7rem; margin: 0 -8px; clip-path: polygon(6% 0, 94% 0, 100% 100%, 0 100%); }
+.predio-corpo { background: #e9eef1; border: 3px solid #9fb4bd; border-top: 0; border-bottom: 0; }
+.andar { display: grid; grid-template-columns: 7.5rem 1fr; align-items: center; gap: .75rem;
+  padding: .6rem .9rem; border-top: 2px solid #cfdbe1; }
+.andar:first-child { border-top: 0; }
+.andar-rotulo { font-size: .74rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #5d7480; }
+.andar-unidades { display: flex; flex-wrap: wrap; gap: .5rem; }
+.andar-unidades .unit { min-width: 5.2rem; text-align: center; }
+.andar-lojas, .andar-terreo { background: #dde7ec; }
+.andar-lojas .andar-unidades { position: relative; padding-top: 1.1rem; }
+.andar-lojas .andar-unidades::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: .7rem;
+  border-radius: 0 0 8px 8px;
+  background: repeating-linear-gradient(90deg, #0e7490 0 1.2rem, #e6f4f8 1.2rem 2.4rem); }
+.predio-base { height: .9rem; background: #9fb4bd; border-radius: 0 0 8px 8px; margin: 0 -6px;
+  box-shadow: 0 6px 0 #c9d6dc; }
+@media (max-width: 767.98px) {
+  .andar { grid-template-columns: 1fr; gap: .3rem; }
+  .predio-wrap { padding: 1rem .5rem; }
+  .andar-unidades { display: grid; grid-template-columns: repeat(auto-fill, minmax(4.3rem, 1fr)); }
+  .andar-unidades .unit { min-width: 0; }
+}
 
 /* ---------- Barra de filtro (pessoa) ---------- */
 .filtro-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .6rem 1.25rem;

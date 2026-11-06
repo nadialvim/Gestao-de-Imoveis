@@ -1,0 +1,15 @@
+{# Botão de unidade: verde = alugado, amarelo = vago; leva à ficha do imóvel. #}
+{% macro unidade(u) -%}
+<a class="unit {{ 'unit-livre' if u.disponivel else 'unit-alugada' }}" href="{{ url_for('fichas.imovel', id=u.id) }}"
+   title="{{ u }} — {{ 'vago' if u.disponivel else 'alugado para ' ~ u.contrato_ativo.inquilino.nome }}">
+  <span class="unit-id">{{ u.identificacao }}</span>
+  <span class="unit-st">{{ 'Vago' if u.disponivel else u.contrato_ativo.inquilino.nome }}</span>
+</a>
+{%- endmacro %}
+
+{% macro legenda() -%}
+<div class="legenda">
+  <span><i class="amostra amostra-alugada"></i>Alugado</span>
+  <span><i class="amostra amostra-livre"></i>Vago</span>
+</div>
+{%- endmacro %}

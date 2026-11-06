@@ -41,7 +41,7 @@ def apartamentos_antigo():
 
 @bp.route("/vagas/")
 def vagas_antigo():
-    return redirect(url_for("crud.listar", slug="imoveis", tipo="vaga"))
+    return redirect(url_for("fichas.garagem"))
 
 
 @bp.route("/contratos/")

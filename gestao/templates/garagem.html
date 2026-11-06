@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% from "_unidade.html" import unidade, legenda %}
+{% block title %}Garagem{% endblock %}
+{% block heading %}Garagem{% endblock %}
+{% block subtitle %}<div class="sub">Todas as vagas de garagem. Clique no número para abrir a ficha da vaga.</div>{% endblock %}
+{% block actions %}
+  <a class="btn btn-primary" href="{{ url_for('crud.novo', slug='imoveis', tipo='vaga') }}"><i class="bi bi-plus-lg me-1"></i>Nova vaga</a>
+{% endblock %}
+{% block content %}
+<div class="row g-3 mb-4">
+  <div class="col-4"><div class="card kpi h-100"><div class="icon icon-blue"><i class="bi bi-car-front"></i></div>
+    <div><div class="label">Vagas</div><div class="value">{{ total }}</div></div></div></div>
+  <div class="col-4"><div class="card kpi h-100"><div class="icon icon-green"><i class="bi bi-key"></i></div>
+    <div><div class="label">Alugadas</div><div class="value">{{ alugadas }}</div></div></div></div>
+  <div class="col-4"><div class="card kpi h-100"><div class="icon icon-amber"><i class="bi bi-door-open"></i></div>
+    <div><div class="label">Livres</div><div class="value">{{ total - alugadas }}</div></div></div></div>
+</div>
+
+<div class="mb-3">{{ legenda() }}</div>
+
+{% for nome, predio, vagas in grupos %}
+<div class="card mb-4">
+  <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <span><i class="bi bi-{{ 'buildings' if predio else 'p-square' }} me-1"></i>
+      {% if predio %}<a class="text-decoration-none" href="{{ url_for('fichas.predio', id=predio.id) }}">{{ nome }}</a>{% else %}{{ nome }}{% endif %}
+      <span class="text-muted fw-normal">({{ vagas|length }})</span></span>
+    <span class="text-muted fw-normal small">{{ vagas|rejectattr('disponivel')|list|length }} alugada(s) · {{ vagas|selectattr('disponivel')|list|length }} vaga(s) livre(s)</span>
+  </div>
+  <div class="card-body">
+    <div class="unit-grid">
+      {% for v in vagas %}{{ unidade(v) }}{% endfor %}
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="card"><div class="empty"><i class="bi bi-car-front"></i>Nenhuma vaga cadastrada. Use <strong>Nova vaga</strong> ou adicione vagas ao cadastrar o prédio.</div></div>
+{% endfor %}
+{% endblock %}

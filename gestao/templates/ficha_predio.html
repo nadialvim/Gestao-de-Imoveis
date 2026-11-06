@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_unidade.html" import unidade, legenda %}
 {% block title %}{{ p.nome }}{% endblock %}
 {% block heading %}{{ p.nome }}{% endblock %}
 {% block subtitle %}<div class="sub">{% if p.endereco %}<i class="bi bi-geo-alt me-1"></i>{{ p.endereco }}{% endif %}</div>{% endblock %}
@@ -16,24 +17,47 @@
     <div><div class="label">Receita mensal (alugadas)</div><div class="value">{{ receita|brl }}</div></div></div></div>
 </div>
 
-{% for nome, unidades in grupos %}
 <div class="card mb-4">
-  <div class="card-header">{{ nome }} <span class="text-muted fw-normal">({{ unidades|length }})</span></div>
+  <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <span><i class="bi bi-buildings me-1"></i>Desenho do prédio</span>
+    {{ legenda() }}
+  </div>
+  <div class="card-body predio-wrap">
+    {% if andares %}
+    <div class="predio" role="group" aria-label="Desenho do prédio {{ p.nome }}">
+      <div class="predio-telhado"><span>{{ p.nome }}</span></div>
+      <div class="predio-corpo">
+        {% for a in andares %}
+        <div class="andar andar-{{ a.tipo }}">
+          <div class="andar-rotulo">{{ a.rotulo }}</div>
+          <div class="andar-unidades">
+            {% for u in a.unidades %}{{ unidade(u) }}{% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="predio-base"></div>
+    </div>
+    <p class="text-muted small text-center mt-3 mb-0">Clique no número para abrir a ficha da unidade. O andar é deduzido do número (101 = 1º andar, 205 = 2º…).</p>
+    {% else %}
+    <div class="empty"><i class="bi bi-door-closed"></i>Nenhum apartamento ou loja neste prédio ainda. Use <strong>Adicionar unidades</strong>.</div>
+    {% endif %}
+  </div>
+</div>
+
+{% if vagas %}
+<div class="card mb-4">
+  <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <span><i class="bi bi-car-front me-1"></i>Garagem do prédio <span class="text-muted fw-normal">({{ vagas|length }})</span></span>
+    <a class="small text-decoration-none" href="{{ url_for('fichas.garagem') }}">Ver toda a garagem</a>
+  </div>
   <div class="card-body">
     <div class="unit-grid">
-      {% for u in unidades %}
-      <a class="unit {{ 'unit-livre' if u.disponivel else 'unit-alugada' }}" href="{{ url_for('fichas.imovel', id=u.id) }}"
-         title="{{ 'Disponível' if u.disponivel else 'Alugado: ' ~ u.contrato_ativo.inquilino.nome }}">
-        <span class="unit-id">{{ u.identificacao }}</span>
-        <span class="unit-st">{{ 'Disponível' if u.disponivel else u.contrato_ativo.inquilino.nome }}</span>
-      </a>
-      {% endfor %}
+      {% for v in vagas %}{{ unidade(v) }}{% endfor %}
     </div>
   </div>
 </div>
-{% else %}
-<div class="card mb-4"><div class="empty"><i class="bi bi-door-closed"></i>Nenhuma unidade cadastrada. Use <strong>Adicionar unidades</strong>.</div></div>
-{% endfor %}
+{% endif %}
 
 <div class="card mb-4">
   <div class="card-header"><i class="bi bi-receipt me-1"></i>Despesas recentes do prédio</div>

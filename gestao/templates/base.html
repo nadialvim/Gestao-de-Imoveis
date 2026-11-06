@@ -16,7 +16,7 @@
 {% if logado %}
 {% set slug = (request.view_args or {}).get('slug') %}
 {% set ep = request.endpoint %}
-{% set sec_imoveis = slug in ('imoveis', 'predios') or ep in ('fichas.predio', 'fichas.imovel') %}
+{% set sec_imoveis = slug in ('imoveis', 'predios') or ep in ('fichas.predio', 'fichas.imovel', 'fichas.garagem') %}
 {% set sec_inquilinos = slug in ('inquilinos', 'alugueis') or ep == 'fichas.inquilino' %}
 {% set sec_relatorios = ep in ('main.relatorios', 'main.debitos', 'main.fechamento') %}
 {% macro item(href, icone, texto, ativo) -%}
@@ -58,7 +58,8 @@
     {% if sec_imoveis or sec_relatorios %}
     {% if sec_imoveis %}
       {% set abas = [('Imóveis', url_for('crud.listar', slug='imoveis'), slug == 'imoveis' or ep == 'fichas.imovel'),
-                     ('Prédios', url_for('crud.listar', slug='predios'), slug == 'predios' or ep == 'fichas.predio')] %}
+                     ('Prédios', url_for('crud.listar', slug='predios'), slug == 'predios' or ep == 'fichas.predio'),
+                     ('Garagem', url_for('fichas.garagem'), ep == 'fichas.garagem')] %}
     {% else %}
       {% set abas = [('Mensal', url_for('main.relatorios'), ep == 'main.relatorios'),
                      ('Fechamento por pessoa', url_for('main.fechamento'), ep == 'main.fechamento'),

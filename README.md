@@ -35,7 +35,8 @@ O menu tem 6 itens: **Início, Imóveis, Inquilinos, Pagamentos, Despesas, Relat
 - **Imóveis** (abas *Imóveis* e *Prédios*): o **Prédio** já é cadastrado com a lista de apartamentos, lojas e vagas
   (`101, 102` ou `101-110`) e dá para adicionar mais depois. **Casa** é independente de prédio; **vaga de
   garagem** é um tipo de imóvel. O valor do aluguel fica no imóvel.
-- **Fichas**: clicar no nome abre a ficha do prédio (grade de unidades verde = disponível / âmbar = alugada),
+- **Desenho do prédio** (ficha do prédio): fachada com um andar por linha (o andar vem do número: 101 = 1º, 205 = 2º), lojas no térreo e a garagem do prédio; **verde = alugado, amarelo = vago**, e clicar no número abre a ficha da unidade. A aba **Garagem** (em Imóveis) lista todas as vagas, por prédio e avulsas, com as mesmas cores e links.
+- **Fichas**: clicar no nome abre a ficha do prédio,
   do imóvel (histórico de aluguéis e pagamentos) ou do inquilino (aluguéis, débito e pagamentos).
 - **Alugar**: botão **Alugar** do imóvel, **Novo aluguel** do inquilino ou do Início — o mesmo formulário:
   escolha (ou cadastre) o inquilino, os imóveis/vagas e o período. O valor mensal é o do imóvel. Também dá

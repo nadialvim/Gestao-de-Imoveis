@@ -322,7 +322,7 @@ def test_ficha_do_predio(client, base):
     novo_contrato(i, a)
     html = client.get(f"/predios/{p.id}").get_data(as_text=True)
     assert "Ed. Sol" in html and "unit-alugada" in html and "unit-livre" in html
-    assert "Apartamentos" in html and "Vagas de garagem" in html
+    assert "Desenho do prédio" in html and "Garagem do prédio" in html
     assert "R$ 1.000,00" in html  # receita mensal das unidades alugadas
 
 
@@ -355,7 +355,7 @@ def test_menu_tem_seis_itens_e_sem_contratos_nem_vagas(client):
 
 
 def test_enderecos_antigos_redirecionam(client):
-    for antigo, novo in (("/c/apartamentos/", "/c/imoveis/"), ("/c/vagas/", "/c/imoveis/?tipo=vaga"),
+    for antigo, novo in (("/c/apartamentos/", "/c/imoveis/"), ("/c/vagas/", "/garagem"),
                          ("/c/contratos/", "/c/inquilinos/")):
         r = client.get(antigo)
         assert r.status_code == 302 and r.headers["Location"].endswith(novo)
@@ -375,7 +375,7 @@ def test_paginas_principais_respondem(client, base):
     for url in ["/", "/c/imoveis/", "/c/predios/", "/c/inquilinos/", "/c/pagamentos/",
                 "/c/despesas/?mes=2026-03", "/c/alugueis/novo", "/c/pagamentos/novo",
                 "/c/imoveis/novo", "/c/predios/novo", "/c/inquilinos/novo",
-                "/relatorios/?mes=2026-03", "/relatorios/debitos",
+                "/relatorios/?mes=2026-03", "/relatorios/debitos", "/garagem",
                 f"/predios/{p.id}", f"/imoveis/{a.id}", f"/inquilinos/{i.id}",
                 f"/c/imoveis/{a.id}/editar", f"/c/predios/{p.id}/editar"]:
         assert client.get(url).status_code == 200, url
@@ -671,3 +671,85 @@ def test_pdfs_legiveis_com_textos_e_paginas(base):
                           filetype="pdf")
     texto = "\n".join(p.get_text() for p in mensal)
     assert "somente Sergio" in texto and "R$ 850,00" in texto and "Fagner" not in texto.split("Despesas")[0]
+
+
+# ---------------------------------------------------------------- desenho do prédio e garagem
+def test_montar_andares(app):
+    from gestao.services.predio import andar_do_apartamento, montar_andares, ordem_natural
+
+    assert [andar_do_apartamento(x) for x in ("101", "205", "1204", "99", "A1", "001")] == \
+        [1, 2, 12, None, None, 0]
+    assert sorted(["10", "2", "101", "A1", "1"], key=ordem_natural) == ["1", "2", "10", "101", "A1"]
+    p = Predio(nome="Torre")
+    unidades = [Imovel(tipo="apartamento", predio=p, identificacao=x) for x in
+                ("201", "101", "102", "1204", "A1", "9")]
+    unidades += [Imovel(tipo="loja", predio=p, identificacao="L2"),
+                 Imovel(tipo="loja", predio=p, identificacao="L1"),
+                 Imovel(tipo="vaga", predio=p, identificacao="G1")]  # vaga fica de fora
+    andares = montar_andares(unidades)
+    assert [(a["rotulo"], [u.identificacao for u in a["unidades"]]) for a in andares] == [
+        ("12º andar", ["1204"]), ("2º andar", ["201"]), ("1º andar", ["101", "102"]),
+        ("Térreo — lojas", ["L1", "L2"]), ("Outros apartamentos", ["9", "A1"])]
+    assert montar_andares([]) == []
+
+
+def test_desenho_do_predio_com_cores_e_links(client, base):
+    p, a, v, i = base
+    b = Imovel(tipo="apartamento", predio=p, identificacao="202", valor_aluguel_padrao=Decimal("900"))
+    loja = Imovel(tipo="loja", predio=p, identificacao="L1", valor_aluguel_padrao=Decimal("2500"))
+    db.session.add_all([b, loja])
+    db.session.commit()
+    novo_contrato(i, a)           # 101 alugado; 202 e L1 vagos
+    html = client.get(f"/predios/{p.id}").get_data(as_text=True)
+    desenho = html.split('class="predio"')[1].split('class="predio-base"')[0]
+    assert desenho.index("2º andar") < desenho.index("1º andar") < desenho.index("Térreo — lojas")
+    for imovel in (a, b, loja):
+        assert f'href="/imoveis/{imovel.id}"' in desenho
+
+    def classe(imovel):
+        return re.search(rf'<a class="unit (unit-\w+)" href="/imoveis/{imovel.id}"', html).group(1)
+
+    assert classe(a) == "unit-alugada" and classe(b) == "unit-livre" and classe(loja) == "unit-livre"
+    assert "Alugado" in html and "Vago" in html          # legenda
+    # a vaga do prédio aparece na seção de garagem, fora do desenho
+    assert f'href="/imoveis/{v.id}"' in html and f'href="/imoveis/{v.id}"' not in desenho
+    # clicar no número leva à ficha do imóvel
+    assert client.get(f"/imoveis/{a.id}").status_code == 200
+
+
+def test_predio_sem_unidades_mostra_aviso(client):
+    client.post("/c/predios/novo", data={"nome": "Vazio"})
+    p = Predio.query.filter_by(nome="Vazio").one()
+    assert "Nenhum apartamento ou loja" in client.get(f"/predios/{p.id}").get_data(as_text=True)
+
+
+def test_aba_garagem_lista_todas_as_vagas(client, base):
+    p, a, v, i = base
+    outra = Imovel(tipo="vaga", predio=p, identificacao="G10")
+    avulsa = Imovel(tipo="vaga", identificacao="Rua 5", valor_aluguel_padrao=Decimal("150"))
+    outro_predio = Predio(nome="Ed. Lua")
+    vaga_lua = Imovel(tipo="vaga", predio=outro_predio, identificacao="1")
+    db.session.add_all([outra, avulsa, outro_predio, vaga_lua])
+    db.session.commit()
+    novo_contrato(i, v, valor="250")                    # G1 alugada
+    html = client.get("/garagem").get_data(as_text=True)
+    assert 'class="nav-link active" href="/garagem">Garagem' in html  # aba Garagem ativa
+    assert "Garagem" in html and "Nova vaga" in html and "tipo=vaga" in html
+    for vaga in (v, outra, avulsa, vaga_lua):
+        assert f'href="/imoveis/{vaga.id}"' in html
+    assert html.index("Ed. Lua") < html.index("Ed. Sol") < html.index("Vagas avulsas")  # prédios por nome; avulsas por último
+    assert html.index(f'/imoveis/{v.id}"') < html.index(f'/imoveis/{outra.id}"')          # G1 antes de G10
+
+    def classe(vaga):
+        return re.search(rf'<a class="unit (unit-\w+)" href="/imoveis/{vaga.id}"', html).group(1)
+
+    assert classe(v) == "unit-alugada" and classe(outra) == "unit-livre" and classe(avulsa) == "unit-livre"
+    assert "Alugadas" in html and "Livres" in html
+    # abas de Imóveis incluem Garagem e o menu principal continua com 6 itens
+    assert 'href="/garagem">Garagem' in html
+    assert html.split('<nav class="side-scroll')[1].split("</nav>")[0].count('class="nav-link') == 6
+
+
+def test_garagem_vazia(client):
+    html = client.get("/garagem").get_data(as_text=True)
+    assert "Nenhuma vaga cadastrada" in html

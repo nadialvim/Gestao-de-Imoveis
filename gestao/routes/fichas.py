@@ -7,6 +7,7 @@ from ..crud import destino_seguro
 from ..extensions import db
 from ..models import Contrato, Despesa, Imovel, Inquilino, Pagamento, Predio
 from ..services import alugueis
+from ..services.predio import montar_andares, ordem_natural
 
 bp = Blueprint("fichas", __name__)
 
@@ -20,19 +21,31 @@ def _pagamentos_recentes(*filtros, limite=10):
 @bp.route("/predios/<int:id>")
 def predio(id):
     p = db.get_or_404(Predio, id)
-    grupos = []
-    plurais = {"apartamento": "Apartamentos", "casa": "Casas", "loja": "Lojas",
-               "vaga": "Vagas de garagem"}
-    for tipo, _ in Imovel.TIPOS:
-        unidades = [i for i in p.imoveis if i.tipo == tipo]
-        if unidades:
-            grupos.append((plurais[tipo], unidades))
+    andares = montar_andares(p.imoveis)
+    vagas = sorted((i for i in p.imoveis if i.tipo == "vaga"),
+                   key=lambda v: ordem_natural(v.identificacao))
     alugadas = [i for i in p.imoveis if not i.disponivel]
     receita = sum((Decimal(str(i.contrato_ativo.valor_mensal)) for i in alugadas), Decimal("0"))
     despesas = (Despesa.query.filter_by(predio_id=p.id)
                 .order_by(Despesa.data.desc(), Despesa.id.desc()).limit(5).all())
-    return render_template("ficha_predio.html", p=p, grupos=grupos, alugadas=len(alugadas),
-                           receita=receita, despesas=despesas)
+    return render_template("ficha_predio.html", p=p, andares=andares, vagas=vagas,
+                           alugadas=len(alugadas), receita=receita, despesas=despesas)
+
+
+@bp.route("/garagem")
+def garagem():
+    """Todas as vagas de garagem (por prédio e avulsas), verde = alugada, amarelo = vaga."""
+    vagas = Imovel.query.filter_by(tipo="vaga").all()
+    por_predio = {}
+    for v in sorted(vagas, key=lambda v: ordem_natural(v.identificacao)):
+        por_predio.setdefault(v.predio, []).append(v)
+    grupos = [(pr.nome, pr, lista) for pr, lista in
+              sorted(((pr, l) for pr, l in por_predio.items() if pr is not None),
+                     key=lambda x: x[0].nome.lower())]
+    if None in por_predio:
+        grupos.append(("Vagas avulsas", None, por_predio[None]))
+    alugadas = sum(not v.disponivel for v in vagas)
+    return render_template("garagem.html", grupos=grupos, total=len(vagas), alugadas=alugadas)
 
 
 @bp.route("/imoveis/<int:id>")
