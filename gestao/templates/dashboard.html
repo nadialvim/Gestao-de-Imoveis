@@ -1,20 +1,28 @@
 {% extends "base.html" %}
 {% block title %}Início — Gestão de Imóveis{% endblock %}
 {% block heading %}Resumo de {{ d.competencia|mes_br }}{% endblock %}
-{% block subtitle %}{% if pessoa %}<div class="sub"><i class="bi bi-funnel me-1"></i>Mostrando só o que <strong>{{ pessoa }}</strong> recebeu e pagou. Pendências e ocupação consideram todos.</div>{% endif %}{% endblock %}
 {% block actions %}
-  <form method="get" class="d-flex align-items-center gap-2" id="filtro-pessoa">
-    <label class="text-muted small mb-0" for="pessoa"><i class="bi bi-person me-1"></i>Pessoa</label>
-    <select name="pessoa" id="pessoa" class="form-select" style="width:auto" onchange="this.form.submit()">
-      <option value="">Todos</option>
-      {% for nome in pessoas %}<option value="{{ nome }}" {% if pessoa == nome %}selected{% endif %}>{{ nome }}</option>{% endfor %}
-    </select>
-  </form>
   <a class="btn btn-primary" href="{{ url_for('crud.novo', slug='alugueis') }}"><i class="bi bi-key me-1"></i>Novo aluguel</a>
   <a class="btn btn-outline-primary" href="{{ url_for('crud.novo', slug='pagamentos') }}"><i class="bi bi-cash-coin me-1"></i>Registrar pagamento</a>
   <a class="btn btn-outline-primary" href="{{ url_for('crud.novo', slug='despesas') }}"><i class="bi bi-receipt me-1"></i>Nova despesa</a>
 {% endblock %}
 {% block content %}
+<div class="filtro-bar" id="filtro-pessoa">
+  <div class="d-flex align-items-center gap-3 flex-wrap">
+    <span class="rotulo"><i class="bi bi-person me-1"></i>Pessoa</span>
+    <nav class="segmented" aria-label="Filtrar por pessoa">
+      <a class="seg {{ 'active' if not pessoa }}" href="{{ url_for('main.dashboard') }}" {% if not pessoa %}aria-current="true"{% endif %}>Todos</a>
+      {% for nome in pessoas %}
+      <a class="seg {{ 'active' if pessoa == nome }}" href="{{ url_for('main.dashboard', pessoa=nome) }}" {% if pessoa == nome %}aria-current="true"{% endif %}>{{ nome }}</a>
+      {% endfor %}
+    </nav>
+  </div>
+  <div class="status">
+    {% if pessoa %}<i class="bi bi-funnel-fill me-1"></i>Somente o que <strong>{{ pessoa }}</strong> recebeu e pagou
+    {% else %}<i class="bi bi-funnel me-1"></i>Todos os recebimentos e despesas{% endif %}
+    · pendências e ocupação são de todos
+  </div>
+</div>
 {% include "_resumo.html" %}
 <div class="row g-3 mb-4">
   <div class="col-12 col-md-6">

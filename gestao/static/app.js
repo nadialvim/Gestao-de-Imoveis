@@ -4,6 +4,27 @@
   document.querySelectorAll("[data-menu-toggle]").forEach(function (el) {
     el.addEventListener("click", function () { body.classList.toggle("menu-open"); });
   });
+  document.querySelectorAll(".sidebar a").forEach(function (a) {
+    a.addEventListener("click", function () { body.classList.remove("menu-open"); });
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") { body.classList.remove("menu-open"); }
+  });
+
+  // Tabelas no celular viram cartões: copia o título de cada coluna para o rótulo da célula
+  document.querySelectorAll("table.table").forEach(function (tabela) {
+    var titulos = Array.prototype.map.call(tabela.querySelectorAll("thead th"), function (th) {
+      return th.textContent.trim();
+    });
+    tabela.querySelectorAll("tbody tr, tfoot tr").forEach(function (tr) {
+      var coluna = 0;
+      Array.prototype.forEach.call(tr.children, function (td) {
+        var span = td.colSpan || 1;
+        if (span === 1 && titulos[coluna]) { td.setAttribute("data-label", titulos[coluna]); }
+        coluna += span;
+      });
+    });
+  });
 
   // Modal de baixa de contrato
   var modalBaixa = document.getElementById("modalBaixa");

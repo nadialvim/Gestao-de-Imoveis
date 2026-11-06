@@ -1,18 +1,18 @@
 <div class="row g-3 mb-4">
-  <div class="col-12 col-md-4">
-    <div class="card kpi">
+  <div class="col-6 col-md-4">
+    <div class="card kpi h-100">
       <div class="icon icon-green"><i class="bi bi-arrow-down-circle"></i></div>
       <div><div class="label">Recebido</div><div class="value">{{ d.total_recebido|brl }}</div></div>
     </div>
   </div>
-  <div class="col-12 col-md-4">
-    <div class="card kpi">
+  <div class="col-6 col-md-4">
+    <div class="card kpi h-100">
       <div class="icon icon-red"><i class="bi bi-arrow-up-circle"></i></div>
       <div><div class="label">Despesas</div><div class="value">{{ d.total_despesas|brl }}</div></div>
     </div>
   </div>
   <div class="col-12 col-md-4">
-    <div class="card kpi">
+    <div class="card kpi h-100">
       <div class="icon icon-blue"><i class="bi bi-wallet2"></i></div>
       <div><div class="label">Saldo a repassar</div><div class="value">{{ d.saldo|brl }}</div></div>
     </div>

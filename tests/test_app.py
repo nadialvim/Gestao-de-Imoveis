@@ -644,12 +644,14 @@ def test_dashboard_com_filtro_de_pessoa(client, base, monkeypatch):
 
     monkeypatch.setattr("gestao.services.periodo.date", _Hoje)
     html = client.get("/").get_data(as_text=True)
-    assert 'id="pessoa"' in html and "Todos" in html and "R$ 1.300,00" in html
+    assert 'class="segmented"' in html and "Todos os recebimentos e despesas" in html
+    assert "R$ 1.300,00" in html and re.search(r'class="seg active"[^>]*>Todos<', html)
     html = client.get("/?pessoa=Fagner").get_data(as_text=True)
-    assert "Mostrando só o que" in html and "Fagner" in html
+    assert "Somente o que" in html and re.search(r'class="seg active"[^>]*>Fagner<', html)
     assert "R$ 400,00" in html and "R$ 1.300,00" not in html
-    assert '<option value="Fagner" selected>' in html
-    assert "Mostrando só o que" not in client.get("/?pessoa=Outro").get_data(as_text=True)
+    # filtro inválido volta para "Todos"; a barra de filtro existe sempre (sem mudar o layout)
+    html = client.get("/?pessoa=Outro").get_data(as_text=True)
+    assert "Somente o que" not in html and 'id="filtro-pessoa"' in html
 
 
 def test_pdfs_legiveis_com_textos_e_paginas(base):
