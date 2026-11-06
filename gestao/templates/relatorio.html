@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Relatório mensal{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <h1 class="h3 mb-0">Relatório de {{ d.competencia|mes_br }}</h1>
+  <div class="d-flex flex-wrap gap-2">
+    <form method="get" class="d-flex gap-2">
+      <input type="month" name="mes" value="{{ mes }}" class="form-control" aria-label="Mês">
+      <button class="btn btn-outline-secondary">Ver</button>
+    </form>
+    <a class="btn btn-danger" href="{{ url_for('main.exportar', formato='pdf', mes=mes) }}">Exportar PDF</a>
+    <a class="btn btn-success" href="{{ url_for('main.exportar', formato='xlsx', mes=mes) }}">Exportar Excel</a>
+  </div>
+</div>
+{% include "_resumo.html" %}
+
+<h2 class="h5">Recebimentos</h2>
+<div class="card shadow-sm mb-4">
+  <div class="table-responsive">
+    <table class="table align-middle mb-0">
+      <thead class="table-light"><tr><th>Data</th><th>Referência</th><th>Inquilino</th><th>Imóvel</th><th class="text-end">Valor</th></tr></thead>
+      <tbody>
+        {% for p in d.pagamentos %}
+        <tr><td>{{ p.data_pagamento|data_br }}</td><td>{{ p.competencia|mes_br }}</td>
+            <td>{{ p.contrato.inquilino.nome }}</td><td>{{ p.contrato.imovel }}</td>
+            <td class="text-end">{{ p.valor_pago|brl }}</td></tr>
+        {% else %}
+        <tr><td colspan="5" class="text-center text-muted py-3">Nenhum recebimento no mês.</td></tr>
+        {% endfor %}
+      </tbody>
+      <tfoot><tr class="fw-bold"><td colspan="4" class="text-end">Total</td><td class="text-end">{{ d.total_recebido|brl }}</td></tr></tfoot>
+    </table>
+  </div>
+</div>
+
+<h2 class="h5">Despesas</h2>
+<div class="card shadow-sm">
+  <div class="table-responsive">
+    <table class="table align-middle mb-0">
+      <thead class="table-light"><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th class="text-end">Valor</th></tr></thead>
+      <tbody>
+        {% for x in d.despesas %}
+        <tr><td>{{ x.data|data_br }}</td><td>{{ x.descricao }}</td><td>{{ x.categoria or '' }}</td>
+            <td class="text-end">{{ x.valor|brl }}</td></tr>
+        {% else %}
+        <tr><td colspan="4" class="text-center text-muted py-3">Nenhuma despesa no mês.</td></tr>
+        {% endfor %}
+      </tbody>
+      <tfoot><tr class="fw-bold"><td colspan="3" class="text-end">Total</td><td class="text-end">{{ d.total_despesas|brl }}</td></tr></tfoot>
+    </table>
+  </div>
+</div>
+{% include "_pendentes.html" %}
+{% endblock %}

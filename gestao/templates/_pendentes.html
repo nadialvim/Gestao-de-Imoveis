@@ -1,0 +1,20 @@
+<h2 class="h5 mt-4">Pagamentos em aberto no mês</h2>
+<div class="card shadow-sm">
+  <div class="table-responsive">
+    <table class="table align-middle mb-0">
+      <thead class="table-light"><tr><th>Contrato</th><th>Vencimento</th><th>Em aberto</th><th>Situação</th></tr></thead>
+      <tbody>
+        {% for p in d.pendentes %}
+        <tr>
+          <td>{{ p.contrato }}</td>
+          <td>{{ p.vencimento|data_br }}</td>
+          <td>{{ p.em_aberto|brl }}</td>
+          <td>{% if p.atrasado %}<span class="badge text-bg-danger">Atrasado</span>{% else %}<span class="badge text-bg-warning">Pendente</span>{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="text-center text-muted py-3">Tudo em dia.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>

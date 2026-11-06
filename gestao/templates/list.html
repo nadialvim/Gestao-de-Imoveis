@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}{{ res.plural }}{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <h1 class="h3 mb-0">{{ res.plural }}</h1>
+  <div class="d-flex flex-wrap gap-2">
+    {% if mes %}
+    <form method="get" class="d-flex gap-2">
+      <input type="month" name="mes" value="{{ mes }}" class="form-control" aria-label="Mês">
+      <button class="btn btn-outline-secondary">Filtrar</button>
+    </form>
+    {% endif %}
+    <a class="btn btn-primary" href="{{ url_for('crud.novo', slug=res.slug) }}">+ Novo(a)</a>
+  </div>
+</div>
+<div class="card shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>{% for t in titulos %}<th>{{ t }}</th>{% endfor %}<th class="text-end">Ações</th></tr>
+      </thead>
+      <tbody>
+        {% for id, cells in linhas %}
+        <tr>
+          {% for c in cells %}<td>{{ c }}</td>{% endfor %}
+          <td class="text-end text-nowrap">
+            <a class="btn btn-sm btn-outline-primary" href="{{ url_for('crud.editar', slug=res.slug, id=id) }}">Editar</a>
+            <form method="post" action="{{ url_for('crud.excluir', slug=res.slug, id=id) }}" class="d-inline"
+                  onsubmit="return confirm('Excluir este registro?');">
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-outline-danger">Excluir</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="{{ titulos|length + 1 }}" class="text-center text-muted py-4">Nenhum registro.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

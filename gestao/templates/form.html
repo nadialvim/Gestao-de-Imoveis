@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}{{ titulo }}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-lg-8 col-xl-6">
+    <h1 class="h3 mb-3">{{ titulo }}</h1>
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <form method="post">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          {% for f in res.fields %}
+          {% set v = valores.get(f.name, '') %}
+          {% if f.kind == 'bool' %}
+          <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" id="{{ f.name }}" name="{{ f.name }}"
+                   {% if v and v != 'False' %}checked{% endif %}>
+            <label class="form-check-label" for="{{ f.name }}">{{ f.label }}</label>
+          </div>
+          {% else %}
+          <div class="mb-3">
+            <label class="form-label" for="{{ f.name }}">{{ f.label }}{% if not f.required %} <small class="text-muted">(opcional)</small>{% endif %}</label>
+            {% if f.kind == 'select' %}
+            <select class="form-select" id="{{ f.name }}" name="{{ f.name }}" {% if f.required %}required{% endif %}>
+              <option value="">— selecione —</option>
+              {% for val, label in f.choices() %}
+              <option value="{{ val }}" {% if v|string == val|string %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+            {% elif f.kind == 'money' %}
+            <input class="form-control" type="number" step="0.01" min="0" inputmode="decimal"
+                   id="{{ f.name }}" name="{{ f.name }}" value="{{ v }}" {% if f.required %}required{% endif %}>
+            {% elif f.kind in ('date', 'month') %}
+            <input class="form-control" type="{{ f.kind }}" id="{{ f.name }}" name="{{ f.name }}"
+                   value="{{ v }}" {% if f.required %}required{% endif %}>
+            {% elif f.kind == 'int' %}
+            <input class="form-control" type="number" id="{{ f.name }}" name="{{ f.name }}"
+                   value="{{ v }}" {% if f.required %}required{% endif %}>
+            {% else %}
+            <input class="form-control" type="text" id="{{ f.name }}" name="{{ f.name }}"
+                   value="{{ v }}" {% if f.required %}required{% endif %}>
+            {% endif %}
+          </div>
+          {% endif %}
+          {% endfor %}
+          <div class="d-flex gap-2">
+            <button class="btn btn-primary">Salvar</button>
+            <a class="btn btn-outline-secondary" href="{{ url_for('crud.listar', slug=res.slug) }}">Cancelar</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

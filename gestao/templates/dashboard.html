@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="h3 mb-3">Resumo de {{ d.competencia|mes_br }}</h1>
+{% include "_resumo.html" %}
+<div class="d-flex flex-wrap gap-2 mb-2">
+  <a class="btn btn-primary" href="{{ url_for('crud.novo', slug='pagamentos') }}">Registrar pagamento</a>
+  <a class="btn btn-outline-primary" href="{{ url_for('crud.novo', slug='despesas') }}">Registrar despesa</a>
+  <a class="btn btn-outline-secondary" href="{{ url_for('main.relatorios') }}">Relatório do mês</a>
+</div>
+{% include "_pendentes.html" %}
+{% endblock %}
