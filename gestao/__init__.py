@@ -51,6 +51,11 @@ def create_app(config=None):
     if os.environ.get("VERCEL") and app.config["SECRET_KEY"] == "dev-insecure":
         raise RuntimeError("Defina SECRET_KEY nas variáveis de ambiente da Vercel.")
 
+    if os.environ.get("VERCEL") and not app.config["SQLALCHEMY_DATABASE_URI"].startswith(
+            "postgresql"):
+        raise RuntimeError("Defina DATABASE_URL (string do Transaction pooler do Supabase, "
+                           "porta 6543) nas variáveis de ambiente da Vercel.")
+
     # Serverless: sem pool persistente de conexões (usa o pooler do Supabase).
     if app.config["SQLALCHEMY_DATABASE_URI"].startswith("postgresql"):
         app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"poolclass": NullPool}

@@ -169,3 +169,11 @@ def test_login_ok(monkeypatch):
                         lambda *a, **k: _Resp(200, {"user": {"email": "a@b.c"}}))
     r = app.test_client().post("/login", data={"email": "a@b.c", "senha": "x"})
     assert r.status_code == 302
+
+
+def test_vercel_exige_database_url(monkeypatch):
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("POSTGRES_URL", raising=False)
+    with pytest.raises(RuntimeError, match="DATABASE_URL"):
+        create_app({"SECRET_KEY": "abc"})
